@@ -1,0 +1,8 @@
+{
+  "fnc_max": 1.0,
+  "fnc_mean": 0.8078466076696165,
+  "fnc_min": 0.6666666666666666,
+  "fnc_std": 0.054301360570914066,
+  "n_frames": 100,
+  "sample": "samples_sidechain_rec"
+}

@@ -4,15 +4,10 @@ import argparse
 import json
 from pathlib import Path
 from typing import List
-from benchmarks import Benchmark
+from benchmarks import Benchmark, BENCHMARK_CHOICES, benchmarks_from_choices
 from evaluator_utils import evaluator_from_benchmark
 from results import BenchmarkResults
 from samples import find_samples_in_dirs
-
-BENCHMARK_CHOICES = [b.value for b in Benchmark]
-
-def benchmarks_from_choices(choices: List[str]) -> List[Benchmark]:
-    return [Benchmark(choice) for choice in set(choices)]
 
 def run_benchmarks(
     benchmarks: List[Benchmark],
@@ -92,7 +87,7 @@ def parse_arguments() -> argparse.Namespace:
         type=str,
         choices=BENCHMARK_CHOICES,
         required=True,
-        help="실행할 벤치마크 리스트.",
+        help="List of benchmarks to evaluate. If set to `all`, all available benchmarks will be run.",
     )
     parser_eval.add_argument(
         "--sample_dirs",

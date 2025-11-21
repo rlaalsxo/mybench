@@ -1,6 +1,5 @@
 # mybench/eval/basic_stats.py
 from __future__ import annotations
-from pathlib import Path
 from typing import Iterable, Optional, List
 import mdtraj as md
 import numpy as np
@@ -29,14 +28,8 @@ def evaluate_basic_stats(
         if max_frames is not None and len(traj) > max_frames:
             traj = traj[:max_frames]
 
-        n_frames = traj.n_frames
-
-        # 시간 축: ps → ns (time 필드가 없으면 frame index 사용)
-        if traj.time is not None and len(traj.time) == n_frames:
-            time_ps = traj.time
-            time_ns = time_ps / 1000.0
-        else:
-            time_ns = np.arange(n_frames, dtype=float)
+        # 프레임 수만 알면 됨 (시간은 사용 안 함)
+        # n_frames = traj.n_frames  # 필요하면 유지
 
         rmsd_nm = md.rmsd(traj, traj, 0)  # 첫 프레임 기준
         rg_nm = md.compute_rg(traj)
@@ -44,7 +37,6 @@ def evaluate_basic_stats(
         metrics_list.append(
             SingleSampleMetrics(
                 name=spec.name,
-                time_ns=time_ns,
                 rmsd_nm=rmsd_nm,
                 rg_nm=rg_nm,
             )
