@@ -6,8 +6,8 @@ from typing import Literal, List
 class Benchmark(str, Enum):
     BASIC_STATS = "basic_stats"
     FNC_SELF = "fnc_self"
-
-
+    FOLDING_FREE_ENERGIES = "folding_free_energies"
+    
 BENCHMARK_CHOICES: list[str] = [b.value for b in Benchmark] + ["all"]
 
 
