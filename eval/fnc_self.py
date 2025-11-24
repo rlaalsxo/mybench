@@ -1,11 +1,8 @@
 # mybench/eval/fnc_self.py
-
 from __future__ import annotations
 from typing import Iterable, Optional, List
-
 import mdtraj as md
 import numpy as np
-
 from bioemu_benchmarks.eval.multiconf.metrics import fraction_native_contacts
 from results import SingleSampleFNC, FNCResults
 from samples import SampleSpec  # basic_stats 에서 사용한 것과 동일한 타입이라고 가정합니다.
@@ -36,51 +33,16 @@ def evaluate_fnc_self(
         bioemu 원본 fraction_native_contacts 로 FNC 계산
       - fold/unfold 라벨은 사용하지 않고,
         단순히 "기준 frame contact 패턴이 얼마나 유지되는지"만 본다.
+      - 동시에 같은 trajectory에서 첫 프레임 기준 RMSD (nm) 도 계산한다.
 
     추가로, 모든 샘플의 FNC 분포를 모아서
       - coverage_bootstrap
       - k_recall_bootstrap
     을 계산하고, 결과를 FNCResults 인스턴스에 속성으로 저장합니다.
-
-    Args:
-        samples:
-            (pdb_path, xtc_path, name, ...) 정보를 가진 SampleSpec iterable.
-        stride:
-            프레임 스텝 (예: 10 이면 0, 10, 20, ... 만 사용)
-        max_frames:
-            최대 프레임 수 제한 (None 이면 제한 없음)
-        exclude_n_neighbours:
-            fraction_native_contacts 에서 사용하는
-            이웃 residue (|i-j| <= k) 제거 기준. (원본과 동일하게 3 등)
-        coverage_nbootstrap:
-            coverage 부트스트랩 반복 횟수.
-        coverage_nsample:
-            coverage 부트스트랩에서 각 샘플당 뽑을 frame 수.
-            None 이면 각 샘플의 frame 수 최댓값을 사용.
-        coverage_nsuccess:
-            한 샘플이 threshold r 에서 "covered" 로 인정되기 위한
-            최소 성공 frame 개수.
-        coverage_num_thresholds:
-            coverage 곡선을 계산할 threshold 개수 (linspace 분할 수).
-        krecall_k:
-            k-recall 에서 사용할 k 값 (상위 k frame).
-        krecall_nbootstrap:
-            k-recall 부트스트랩 반복 횟수.
-        krecall_nsample:
-            k-recall 부트스트랩에서 각 샘플당 뽑을 frame 수.
-            None 이면 각 샘플의 frame 수 최댓값을 사용.
-
-    Returns:
-        FNCResults:
-            - samples: 각 샘플별 FNC 시계열
-            - (동적 속성으로)
-              coverage_thresholds: np.ndarray (threshold 축)
-              coverage_bootstrap: np.ndarray (nbootstrap, nthreshold)
-              krecall_bootstrap: Dict[str, (mean, std)]
     """
     metrics_list: List[SingleSampleFNC] = []
 
-    # 1) 각 샘플에서 self-reference FNC 계산
+    # 1) 각 샘플에서 self-reference FNC + RMSD 계산
     for spec in samples:
         print(f"[INFO] FNC_SELF: loading {spec.name}")
         traj = md.load(spec.xtc_path.as_posix(), top=spec.pdb_path.as_posix())
@@ -100,11 +62,13 @@ def evaluate_fnc_self(
 
         frame_idx = np.arange(n_frames, dtype=int)
 
+        # (추가) RMSD (첫 프레임 기준, nm)
+        rmsd_nm = md.rmsd(traj, traj, 0)  # shape: (n_frames,)
+
         # 기준 구조: 첫 프레임만 가진 1-frame trajectory
         ref_traj = traj[0]
 
         # 전체 chain 사용 → matching_resids=None, reference_resid_pairs=None
-        # 정의/수식은 bioemu metrics.py 의 fraction_native_contacts 그대로.
         fnc = fraction_native_contacts(
             traj_i=ref_traj,
             traj_j=traj,
@@ -120,6 +84,7 @@ def evaluate_fnc_self(
                 name=spec.name,
                 frame_idx=frame_idx,
                 fnc=fnc,
+                rmsd_nm=rmsd_nm,  # 여기가 핵심 추가
             )
         )
 
@@ -152,13 +117,10 @@ def evaluate_fnc_self(
             larger_is_better=True,
         )
 
-        # FNCResults 인스턴스에 동적으로 속성으로 부착
-        # (원하시면 FNCResults dataclass 에 정식 필드로 추가하셔도 됩니다.)
         results.coverage_thresholds = thresholds           # np.ndarray (nthreshold,)
         results.coverage_bootstrap = coverages             # np.ndarray (nbootstrap, nthreshold)
         results.krecall_bootstrap = krec                   # Dict[str, (mean, std)]
     else:
-        # 샘플이 하나도 없으면 빈 형태로 속성만 추가
         results.coverage_thresholds = np.array([], dtype=float)
         results.coverage_bootstrap = np.zeros((0, 0), dtype=float)
         results.krecall_bootstrap = {}

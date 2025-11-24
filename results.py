@@ -1,5 +1,6 @@
 # results.py
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,6 +10,12 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+
+# ======================================================================
+# 공통 베이스 클래스
+# ======================================================================
+
 
 class BenchmarkResults(ABC):
     @abstractmethod
@@ -22,15 +29,19 @@ class BenchmarkResults(ABC):
     @abstractmethod
     def plot(self, output_dir: Path) -> None:
         ...
-# ----------------------------------------------------------------------
+
+
+# ======================================================================
 # BASIC STATS (RMSD / Rg)
-# ----------------------------------------------------------------------
+# ======================================================================
+
 
 @dataclass
 class SingleSampleMetrics:
     name: str
     rmsd_nm: np.ndarray
     rg_nm: np.ndarray
+
 
 @dataclass
 class BasicStatsResults(BenchmarkResults):
@@ -132,22 +143,26 @@ class BasicStatsResults(BenchmarkResults):
             fig.savefig(sample_dir / "rmsd_hist.png", dpi=200)
             plt.close(fig)
 
-# ----------------------------------------------------------------------
+
+# ======================================================================
 # FNC SELF (fraction of native contacts 기반 분석)
-# ----------------------------------------------------------------------
+# ======================================================================
+
 
 @dataclass
 class SingleSampleFNC:
     """
-    한 샘플(trajectory)에 대한 FNC 정보.
+    한 샘플(trajectory)에 대한 FNC / RMSD 정보.
 
     name      : 샘플 이름 (디렉토리 이름 등)
     frame_idx : 프레임 인덱스 (0, 1, 2, ...)
     fnc       : 각 프레임에서의 fraction of native contacts 값
+    rmsd_nm   : 같은 프레임에서의 RMSD (첫 프레임 기준, nm)
     """
     name: str
     frame_idx: np.ndarray
     fnc: np.ndarray
+    rmsd_nm: np.ndarray
 
 
 @dataclass
@@ -156,7 +171,7 @@ class FNCResults(BenchmarkResults):
     여러 샘플에 대해 self-reference FNC를 계산한 결과 모음.
 
     samples:
-        각 샘플의 FNC 시계열
+        각 샘플의 FNC / RMSD 시계열
     coverage_thresholds:
         coverage 곡선에 사용한 threshold 배열 (shape: [n_thresholds])
     coverage_bootstrap:
@@ -170,10 +185,10 @@ class FNCResults(BenchmarkResults):
     coverage_bootstrap: np.ndarray | None = None
     krecall_bootstrap: Dict[str, Tuple[float, float]] | None = None
 
+    # ------------------------------------------------------------------
+    # 집계 메트릭
+    # ------------------------------------------------------------------
     def get_aggregate_metrics(self) -> Dict[str, float]:
-        """
-        전체 FNC 분포 및 coverage / k-recall 요약값을 반환.
-        """
         metrics: Dict[str, float] = {}
 
         if not self.samples:
@@ -209,9 +224,12 @@ class FNCResults(BenchmarkResults):
 
         return metrics
 
+    # ------------------------------------------------------------------
+    # 파일 저장
+    # ------------------------------------------------------------------
     def save_results(self, output_dir: Path) -> None:
         """
-        샘플별 FNC 시계열과 요약 통계,
+        샘플별 FNC / RMSD 시계열과 요약 통계,
         coverage / k-recall 요약을 디스크에 저장.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -226,6 +244,7 @@ class FNCResults(BenchmarkResults):
                 {
                     "frame": s.frame_idx,
                     "fnc": s.fnc,
+                    "rmsd_nm": s.rmsd_nm,
                 }
             )
             df.to_csv(sample_dir / "fnc_timeseries.csv", index=False)
@@ -277,29 +296,64 @@ class FNCResults(BenchmarkResults):
             )
             df_k.to_csv(output_dir / "fnc_krecall_bootstrap.csv", index=False)
 
+    # ------------------------------------------------------------------
+    # 플롯 생성 (1D + 2D free energy)
+    # ------------------------------------------------------------------
     def plot(self, output_dir: Path) -> None:
         """
         각 샘플마다:
-        - FNC vs Frame
-        - FNC 기반 1D free energy (–log p(FNC), 0~1 구간)
-        를 그림으로 저장.
+        1) FNC vs Frame
+        2) FNC 기반 1D free energy (–log p(FNC), 0~1 구간)
+        3) RMSD–FNC 2D free energy landscape
+
+        세 종류의 이미지를 저장합니다.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
         from bioemu_benchmarks.eval.multiconf.plot import plot_smoothed_1d_free_energy
 
-        # import 이 실제로 성공했는지 확인용
-        print(
-            "[DEBUG] using plot_smoothed_1d_free_energy from "
-            "bioemu_benchmarks.eval.multiconf.plot:",
-            plot_smoothed_1d_free_energy,
-        )
+        def _compute_2d_free_energy(
+            x: np.ndarray,
+            y: np.ndarray,
+            bins: int = 50,
+            kT: float = 1.0,
+        ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+            """
+            (x, y) 데이터로부터 2D free energy (–kT log p(x,y)) 계산.
+            F는 최소값을 0으로 shift 해서 반환합니다.
+            """
+            assert x.shape == y.shape
+
+            x_range = (float(x.min()), float(x.max()))
+            y_range = (float(y.min()), float(y.max()))
+
+            hist, xedges, yedges = np.histogram2d(
+                x, y, bins=bins, range=[x_range, y_range]
+            )
+
+            hist = hist.astype(float)
+            total = hist.sum()
+            if total > 0:
+                hist /= total
+
+            eps = 1e-12
+            F = -kT * np.log(hist + eps)
+
+            finite = np.isfinite(F)
+            if np.any(finite):
+                F = F - F[finite].min()
+
+            x_centers = 0.5 * (xedges[:-1] + xedges[1:])
+            y_centers = 0.5 * (yedges[:-1] + yedges[1:])
+            return F, x_centers, y_centers
 
         for s in self.samples:
             sample_dir = output_dir / s.name
             sample_dir.mkdir(parents=True, exist_ok=True)
 
+            # ----------------------------------------------------------
             # 1) FNC vs Frame
+            # ----------------------------------------------------------
             fig, ax = plt.subplots(figsize=(8, 4))
             ax.plot(s.frame_idx, s.fnc)
             ax.set_xlabel("Frame")
@@ -308,7 +362,9 @@ class FNCResults(BenchmarkResults):
             fig.savefig(sample_dir / "fnc_vs_frame.png", dpi=200)
             plt.close(fig)
 
-            # 2) FNC free energy (1D)
+            # ----------------------------------------------------------
+            # 2) FNC 1D free energy
+            # ----------------------------------------------------------
             fig2, ax2 = plt.subplots(figsize=(8, 4))
             plot_smoothed_1d_free_energy(
                 s.fnc,
@@ -320,3 +376,26 @@ class FNCResults(BenchmarkResults):
             ax2.set_title(f"{s.name} - FNC free energy")
             fig2.savefig(sample_dir / "fnc_free_energy.png", dpi=200)
             plt.close(fig2)
+
+            # ----------------------------------------------------------
+            # 3) RMSD–FNC 2D free energy
+            # ----------------------------------------------------------
+            n = min(len(s.rmsd_nm), len(s.fnc))
+            x = s.rmsd_nm[:n]
+            y = s.fnc[:n]
+
+            F2d, x_centers, y_centers = _compute_2d_free_energy(x, y, bins=50, kT=1.0)
+            X, Y = np.meshgrid(x_centers, y_centers, indexing="ij")
+
+            fig3, ax3 = plt.subplots(figsize=(6, 5))
+            cf = ax3.contourf(X, Y, F2d.T, levels=20)
+            cbar = fig3.colorbar(cf, ax=ax3)
+            cbar.set_label("free energy (arb. units)")
+
+            ax3.set_xlabel("RMSD (nm)")
+            ax3.set_ylabel("fraction of native contacts")
+            ax3.set_title(f"{s.name} - RMSD vs FNC 2D free energy")
+
+            fig3.tight_layout()
+            fig3.savefig(sample_dir / "rmsd_fnc_free_energy.png", dpi=200)
+            plt.close(fig3)
