@@ -55,37 +55,37 @@ class BasicStatsResults(BenchmarkResults):
     def save_results(self, output_dir: Path) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        summaries = []
-        for s in self.samples:
-            sample_dir = output_dir / s.name
-            sample_dir.mkdir(parents=True, exist_ok=True)
+        # summaries = []
+        # for s in self.samples:
+        #     sample_dir = output_dir / s.name
+        #     sample_dir.mkdir(parents=True, exist_ok=True)
 
-            n_frames = len(s.rmsd_nm)
-            df = pd.DataFrame(
-                {
-                    "frame": np.arange(n_frames, dtype=int),
-                    "rmsd_nm": s.rmsd_nm,
-                    "rg_nm": s.rg_nm,
-                }
-            )
-            df.to_csv(sample_dir / "metrics.csv", index=False)
+        #     n_frames = len(s.rmsd_nm)
+        #     df = pd.DataFrame(
+        #         {
+        #             "frame": np.arange(n_frames, dtype=int),
+        #             "rmsd_nm": s.rmsd_nm,
+        #             "rg_nm": s.rg_nm,
+        #         }
+        #     )
+        #     df.to_csv(sample_dir / "metrics.csv", index=False)
 
-            summary = {
-                "sample": s.name,
-                "n_frames": int(n_frames),
-                "rmsd_mean_nm": float(np.mean(s.rmsd_nm)),
-                "rmsd_std_nm": float(np.std(s.rmsd_nm)),
-                "rmsd_min_nm": float(np.min(s.rmsd_nm)),
-                "rmsd_max_nm": float(np.max(s.rmsd_nm)),
-                "rg_mean_nm": float(np.mean(s.rg_nm)),
-                "rg_std_nm": float(np.std(s.rg_nm)),
-                "rg_min_nm": float(np.min(s.rg_nm)),
-                "rg_max_nm": float(np.max(s.rg_nm)),
-            }
-            with open(sample_dir / "summary.json", "w") as f:
-                json.dump(summary, f, indent=2, sort_keys=True)
+        #     summary = {
+        #         "sample": s.name,
+        #         "n_frames": int(n_frames),
+        #         "rmsd_mean_nm": float(np.mean(s.rmsd_nm)),
+        #         "rmsd_std_nm": float(np.std(s.rmsd_nm)),
+        #         "rmsd_min_nm": float(np.min(s.rmsd_nm)),
+        #         "rmsd_max_nm": float(np.max(s.rmsd_nm)),
+        #         "rg_mean_nm": float(np.mean(s.rg_nm)),
+        #         "rg_std_nm": float(np.std(s.rg_nm)),
+        #         "rg_min_nm": float(np.min(s.rg_nm)),
+        #         "rg_max_nm": float(np.max(s.rg_nm)),
+        #     }
+        #     with open(sample_dir / "summary.json", "w") as f:
+        #         json.dump(summary, f, indent=2, sort_keys=True)
 
-            summaries.append(summary)
+        #     summaries.append(summary)
 
         # if summaries:
         #     summary_df = pd.DataFrame(summaries)
@@ -903,12 +903,12 @@ class MDEmulationSelfResults(BenchmarkResults):
 
             summaries.append(summary)
 
-        if summaries:
-            summary_df = pd.DataFrame(summaries)
-            summary_df.to_csv(
-                output_dir / "all_samples_md_emulation_summary.csv",
-                index=False,
-            )
+        # if summaries:
+        #     summary_df = pd.DataFrame(summaries)
+        #     summary_df.to_csv(
+        #         output_dir / "all_samples_md_emulation_summary.csv",
+        #         index=False,
+        #     )
 
     # results.py 내부, MDEmulationSelfResults 클래스의 plot 메서드만 교체
 
@@ -1167,10 +1167,10 @@ class DSSPResults(BenchmarkResults):
 
             summaries.append(summary)
 
-        # 전체 샘플 요약 CSV
-        if summaries:
-            summary_df = pd.DataFrame(summaries)
-            summary_df.to_csv(output_dir / "all_samples_dssp_summary.csv", index=False)
+        # # 전체 샘플 요약 CSV
+        # if summaries:
+        #     summary_df = pd.DataFrame(summaries)
+        #     summary_df.to_csv(output_dir / "all_samples_dssp_summary.csv", index=False)
 
     def plot(self, output_dir: Path) -> None:
         """
