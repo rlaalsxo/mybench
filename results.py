@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 # BioEmu free_energies.py 와 동일한 볼츠만 상수 (kcal / (mol·K))
 K_BOLTZMANN = 0.001987203599772605  # kcal / (mol·K)
 
-
 class BenchmarkResults(ABC):
     @abstractmethod
     def get_aggregate_metrics(self) -> Dict[str, float]:
@@ -26,18 +25,15 @@ class BenchmarkResults(ABC):
     def plot(self, output_dir: Path) -> None:
         ...
 
-
 # ----------------------------------------------------------------------
 # BASIC STATS (RMSD / Rg)
 # ----------------------------------------------------------------------
-
 
 @dataclass
 class SingleSampleMetrics:
     name: str
     rmsd_nm: np.ndarray
     rg_nm: np.ndarray
-
 
 @dataclass
 class BasicStatsResults(BenchmarkResults):
@@ -91,9 +87,9 @@ class BasicStatsResults(BenchmarkResults):
 
             summaries.append(summary)
 
-        if summaries:
-            summary_df = pd.DataFrame(summaries)
-            summary_df.to_csv(output_dir / "all_samples_summary.csv", index=False)
+        # if summaries:
+        #     summary_df = pd.DataFrame(summaries)
+        #     summary_df.to_csv(output_dir / "all_samples_summary.csv", index=False)
 
     def plot(self, output_dir: Path) -> None:
         """
@@ -104,45 +100,43 @@ class BasicStatsResults(BenchmarkResults):
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        for s in self.samples:
-            sample_dir = output_dir / s.name
-            sample_dir.mkdir(parents=True, exist_ok=True)
+        # for s in self.samples:
+        #     sample_dir = output_dir / s.name
+        #     sample_dir.mkdir(parents=True, exist_ok=True)
 
-            n_frames = len(s.rmsd_nm)
-            frames = np.arange(n_frames, dtype=int)
+        #     n_frames = len(s.rmsd_nm)
+        #     frames = np.arange(n_frames, dtype=int)
 
-            # 1) RMSD vs Frame
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.plot(frames, s.rmsd_nm)
-            ax.set_xlabel("Frame")
-            ax.set_ylabel("RMSD (nm)")
-            ax.set_title(f"{s.name} - RMSD vs Frame")
-            fig.savefig(sample_dir / "rmsd_vs_frame.png", dpi=200)
-            plt.close(fig)
+        #     # 1) RMSD vs Frame
+        #     fig, ax = plt.subplots(figsize=(8, 4))
+        #     ax.plot(frames, s.rmsd_nm)
+        #     ax.set_xlabel("Frame")
+        #     ax.set_ylabel("RMSD (nm)")
+        #     ax.set_title(f"{s.name} - RMSD vs Frame")
+        #     fig.savefig(sample_dir / "rmsd_vs_frame.png", dpi=200)
+        #     plt.close(fig)
 
-            # 2) Rg vs Frame
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.plot(frames, s.rg_nm)
-            ax.set_xlabel("Frame")
-            ax.set_ylabel("Radius of gyration (nm)")
-            ax.set_title(f"{s.name} - Rg vs Frame")
-            fig.savefig(sample_dir / "rg_vs_frame.png", dpi=200)
-            plt.close(fig)
+        #     # 2) Rg vs Frame
+        #     fig, ax = plt.subplots(figsize=(8, 4))
+        #     ax.plot(frames, s.rg_nm)
+        #     ax.set_xlabel("Frame")
+        #     ax.set_ylabel("Radius of gyration (nm)")
+        #     ax.set_title(f"{s.name} - Rg vs Frame")
+        #     fig.savefig(sample_dir / "rg_vs_frame.png", dpi=200)
+        #     plt.close(fig)
 
-            # 3) RMSD histogram
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.hist(s.rmsd_nm, bins=40)
-            ax.set_xlabel("RMSD (nm)")
-            ax.set_ylabel("Count")
-            ax.set_title(f"{s.name} - RMSD distribution")
-            fig.savefig(sample_dir / "rmsd_hist.png", dpi=200)
-            plt.close(fig)
-
+        #     # 3) RMSD histogram
+        #     fig, ax = plt.subplots(figsize=(8, 4))
+        #     ax.hist(s.rmsd_nm, bins=40)
+        #     ax.set_xlabel("RMSD (nm)")
+        #     ax.set_ylabel("Count")
+        #     ax.set_title(f"{s.name} - RMSD distribution")
+        #     fig.savefig(sample_dir / "rmsd_hist.png", dpi=200)
+        #     plt.close(fig)
 
 # ----------------------------------------------------------------------
 # FNC SELF (fraction of native contacts 기반 분석)
 # ----------------------------------------------------------------------
-
 
 @dataclass
 class SingleSampleFNC:
@@ -158,7 +152,6 @@ class SingleSampleFNC:
     frame_idx: np.ndarray
     fnc: np.ndarray
     rmsd_nm: np.ndarray
-
 
 @dataclass
 class FNCResults(BenchmarkResults):
@@ -220,68 +213,68 @@ class FNCResults(BenchmarkResults):
         샘플별 FNC 시계열과 요약 통계,
         coverage / k-recall 요약을 디스크에 저장.
         """
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # output_dir.mkdir(parents=True, exist_ok=True)
 
-        summaries = []
-        for s in self.samples:
-            sample_dir = output_dir / s.name
-            sample_dir.mkdir(parents=True, exist_ok=True)
+        # summaries = []
+        # for s in self.samples:
+        #     sample_dir = output_dir / s.name
+        #     sample_dir.mkdir(parents=True, exist_ok=True)
 
-            n_frames = len(s.fnc)
-            df = pd.DataFrame(
-                {
-                    "frame": s.frame_idx,
-                    "fnc": s.fnc,
-                }
-            )
-            df.to_csv(sample_dir / "fnc_timeseries.csv", index=False)
+        #     n_frames = len(s.fnc)
+        #     df = pd.DataFrame(
+        #         {
+        #             "frame": s.frame_idx,
+        #             "fnc": s.fnc,
+        #         }
+        #     )
+        #     df.to_csv(sample_dir / "fnc_timeseries.csv", index=False)
 
-            summary = {
-                "sample": s.name,
-                "n_frames": int(n_frames),
-                "fnc_mean": float(np.mean(s.fnc)),
-                "fnc_std": float(np.std(s.fnc)),
-                "fnc_min": float(np.min(s.fnc)),
-                "fnc_max": float(np.max(s.fnc)),
-            }
-            with open(sample_dir / "fnc_summary.json", "w") as f:
-                json.dump(summary, f, indent=2, sort_keys=True)
+        #     summary = {
+        #         "sample": s.name,
+        #         "n_frames": int(n_frames),
+        #         "fnc_mean": float(np.mean(s.fnc)),
+        #         "fnc_std": float(np.std(s.fnc)),
+        #         "fnc_min": float(np.min(s.fnc)),
+        #         "fnc_max": float(np.max(s.fnc)),
+        #     }
+        #     with open(sample_dir / "fnc_summary.json", "w") as f:
+        #         json.dump(summary, f, indent=2, sort_keys=True)
 
-            summaries.append(summary)
+        #     summaries.append(summary)
 
-        if summaries:
-            summary_df = pd.DataFrame(summaries)
-            summary_df.to_csv(output_dir / "all_samples_fnc_summary.csv", index=False)
+        # if summaries:
+        #     summary_df = pd.DataFrame(summaries)
+        #     summary_df.to_csv(output_dir / "all_samples_fnc_summary.csv", index=False)
 
-        # coverage / k-recall 요약 저장
-        if (
-            self.coverage_thresholds is not None
-            and self.coverage_bootstrap is not None
-            and self.coverage_bootstrap.size > 0
-        ):
-            cov_mean = self.coverage_bootstrap.mean(axis=0)
-            cov_std = self.coverage_bootstrap.std(axis=0)
-            df_cov = pd.DataFrame(
-                {
-                    "threshold": self.coverage_thresholds,
-                    "coverage_mean": cov_mean,
-                    "coverage_std": cov_std,
-                }
-            )
-            df_cov.to_csv(output_dir / "fnc_coverage_bootstrap.csv", index=False)
+        # # coverage / k-recall 요약 저장
+        # if (
+        #     self.coverage_thresholds is not None
+        #     and self.coverage_bootstrap is not None
+        #     and self.coverage_bootstrap.size > 0
+        # ):
+        #     cov_mean = self.coverage_bootstrap.mean(axis=0)
+        #     cov_std = self.coverage_bootstrap.std(axis=0)
+        #     df_cov = pd.DataFrame(
+        #         {
+        #             "threshold": self.coverage_thresholds,
+        #             "coverage_mean": cov_mean,
+        #             "coverage_std": cov_std,
+        #         }
+        #     )
+        #     df_cov.to_csv(output_dir / "fnc_coverage_bootstrap.csv", index=False)
 
-        if self.krecall_bootstrap:
-            df_k = pd.DataFrame(
-                [
-                    {
-                        "sample": name,
-                        "krecall_mean": float(m),
-                        "krecall_std": float(s),
-                    }
-                    for name, (m, s) in self.krecall_bootstrap.items()
-                ]
-            )
-            df_k.to_csv(output_dir / "fnc_krecall_bootstrap.csv", index=False)
+        # if self.krecall_bootstrap:
+        #     df_k = pd.DataFrame(
+        #         [
+        #             {
+        #                 "sample": name,
+        #                 "krecall_mean": float(m),
+        #                 "krecall_std": float(s),
+        #             }
+        #             for name, (m, s) in self.krecall_bootstrap.items()
+        #         ]
+        #     )
+        #     df_k.to_csv(output_dir / "fnc_krecall_bootstrap.csv", index=False)
 
     def plot(self, output_dir: Path) -> None:
         """
@@ -293,112 +286,112 @@ class FNCResults(BenchmarkResults):
         - bin 기반 free energy 그리드 및 확률을 CSV로 저장
         - 각 프레임별 free energy 값을 CSV로 저장
         """
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # output_dir.mkdir(parents=True, exist_ok=True)
 
-        from bioemu_benchmarks.eval.multiconf.plot import plot_smoothed_1d_free_energy
+        # from bioemu_benchmarks.eval.multiconf.plot import plot_smoothed_1d_free_energy
 
-        print(
-            "[DEBUG] using plot_smoothed_1d_free_energy from "
-            "bioemu_benchmarks.eval.multiconf.plot:",
-            plot_smoothed_1d_free_energy,
-        )
+        # print(
+        #     "[DEBUG] using plot_smoothed_1d_free_energy from "
+        #     "bioemu_benchmarks.eval.multiconf.plot:",
+        #     plot_smoothed_1d_free_energy,
+        # )
 
-        for s in self.samples:
-            sample_dir = output_dir / s.name
-            sample_dir.mkdir(parents=True, exist_ok=True)
+        # for s in self.samples:
+        #     sample_dir = output_dir / s.name
+        #     sample_dir.mkdir(parents=True, exist_ok=True)
 
-            # 1) FNC vs Frame
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.plot(s.frame_idx, s.fnc)
-            ax.set_xlabel("Frame")
-            ax.set_ylabel("fraction of native contacts")
-            ax.set_title(f"{s.name} - FNC vs Frame")
-            fig.savefig(sample_dir / "fnc_vs_frame.png", dpi=200)
-            plt.close(fig)
+        #     # 1) FNC vs Frame
+        #     fig, ax = plt.subplots(figsize=(8, 4))
+        #     ax.plot(s.frame_idx, s.fnc)
+        #     ax.set_xlabel("Frame")
+        #     ax.set_ylabel("fraction of native contacts")
+        #     ax.set_title(f"{s.name} - FNC vs Frame")
+        #     fig.savefig(sample_dir / "fnc_vs_frame.png", dpi=200)
+        #     plt.close(fig)
 
-            # 2) 우리가 직접 계산하는 1D free energy (–log p, arbitrary units)
-            #    - histogram: [0,1] 구간, 50 bins, density=True
-            hist, edges = np.histogram(
-                s.fnc,
-                bins=50,
-                range=(0.0, 1.0),
-                density=True,
-            )
-            centers = 0.5 * (edges[:-1] + edges[1:])   # bin center
-            P = hist                                  # density=True → 확률밀도 (적분 1)
-            F = -np.log(P + 1e-12)                    # –log p, 임의 단위
+        #     # 2) 우리가 직접 계산하는 1D free energy (–log p, arbitrary units)
+        #     #    - histogram: [0,1] 구간, 50 bins, density=True
+        #     hist, edges = np.histogram(
+        #         s.fnc,
+        #         bins=50,
+        #         range=(0.0, 1.0),
+        #         density=True,
+        #     )
+        #     centers = 0.5 * (edges[:-1] + edges[1:])   # bin center
+        #     P = hist                                  # density=True → 확률밀도 (적분 1)
+        #     F = -np.log(P + 1e-12)                    # –log p, 임의 단위
 
-            finite = np.isfinite(F)
-            if np.any(finite):
-                F = F - np.min(F[finite])             # 최소값을 0으로 shift
+        #     finite = np.isfinite(F)
+        #     if np.any(finite):
+        #         F = F - np.min(F[finite])             # 최소값을 0으로 shift
 
-                F_fin = F[finite]
-                print(
-                    f"[DEBUG] FNC_FE_1D_GRID {s.name}: "
-                    f"min(F_grid)={F_fin.min():.3f}, "
-                    f"max(F_grid)={F_fin.max():.3f}, "
-                    f"mean(F_grid)={F_fin.mean():.3f}"
-                )
+        #         F_fin = F[finite]
+        #         print(
+        #             f"[DEBUG] FNC_FE_1D_GRID {s.name}: "
+        #             f"min(F_grid)={F_fin.min():.3f}, "
+        #             f"max(F_grid)={F_fin.max():.3f}, "
+        #             f"mean(F_grid)={F_fin.mean():.3f}"
+        #         )
 
-                # bin 기반 free energy 그리드 CSV
-                df_grid = pd.DataFrame(
-                    {
-                        "fnc_center": centers,
-                        "prob_density": P,
-                        "free_energy_arb": F,
-                    }
-                )
-                df_grid.to_csv(
-                    sample_dir / "fnc_free_energy_1d_grid.csv",
-                    index=False,
-                )
+        #         # bin 기반 free energy 그리드 CSV
+        #         df_grid = pd.DataFrame(
+        #             {
+        #                 "fnc_center": centers,
+        #                 "prob_density": P,
+        #                 "free_energy_arb": F,
+        #             }
+        #         )
+        #         df_grid.to_csv(
+        #             sample_dir / "fnc_free_energy_1d_grid.csv",
+        #             index=False,
+        #         )
 
-                # 각 프레임별 free energy (해당 bin의 F 값 부여)
-                idx = np.searchsorted(edges, s.fnc, side="right") - 1
-                valid = (idx >= 0) & (idx < F.shape[0])
+        #         # 각 프레임별 free energy (해당 bin의 F 값 부여)
+        #         idx = np.searchsorted(edges, s.fnc, side="right") - 1
+        #         valid = (idx >= 0) & (idx < F.shape[0])
 
-                fe_per_frame = np.full(s.fnc.shape, np.nan, dtype=float)
-                fe_per_frame[valid] = F[idx[valid]]
+        #         fe_per_frame = np.full(s.fnc.shape, np.nan, dtype=float)
+        #         fe_per_frame[valid] = F[idx[valid]]
 
-                fe_valid = fe_per_frame[np.isfinite(fe_per_frame)]
-                if fe_valid.size > 0:
-                    print(
-                        f"[DEBUG] FNC_FE_1D_FRAMES {s.name}: "
-                        f"min(F_frame)={fe_valid.min():.3f}, "
-                        f"max(F_frame)={fe_valid.max():.3f}, "
-                        f"mean(F_frame)={fe_valid.mean():.3f}, "
-                        f"n_valid={fe_valid.size}/{fe_per_frame.size}"
-                    )
-                else:
-                    print(
-                        f"[DEBUG] FNC_FE_1D_FRAMES {s.name}: "
-                        f"no valid frame free energies (all NaN)."
-                    )
+        #         fe_valid = fe_per_frame[np.isfinite(fe_per_frame)]
+        #         if fe_valid.size > 0:
+        #             print(
+        #                 f"[DEBUG] FNC_FE_1D_FRAMES {s.name}: "
+        #                 f"min(F_frame)={fe_valid.min():.3f}, "
+        #                 f"max(F_frame)={fe_valid.max():.3f}, "
+        #                 f"mean(F_frame)={fe_valid.mean():.3f}, "
+        #                 f"n_valid={fe_valid.size}/{fe_per_frame.size}"
+        #             )
+        #         else:
+        #             print(
+        #                 f"[DEBUG] FNC_FE_1D_FRAMES {s.name}: "
+        #                 f"no valid frame free energies (all NaN)."
+        #             )
 
-                df_frames = pd.DataFrame(
-                    {
-                        "frame": s.frame_idx,
-                        "fnc": s.fnc,
-                        "free_energy_arb": fe_per_frame,
-                    }
-                )
-                df_frames.to_csv(
-                    sample_dir / "fnc_free_energy_1d_per_frame.csv",
-                    index=False,
-                )
+        #         df_frames = pd.DataFrame(
+        #             {
+        #                 "frame": s.frame_idx,
+        #                 "fnc": s.fnc,
+        #                 "free_energy_arb": fe_per_frame,
+        #             }
+        #         )
+        #         df_frames.to_csv(
+        #             sample_dir / "fnc_free_energy_1d_per_frame.csv",
+        #             index=False,
+        #         )
 
-            # 3) BioEmu의 plot_smoothed_1d_free_energy로 그림 (기존 방식 유지)
-            fig2, ax2 = plt.subplots(figsize=(8, 4))
-            plot_smoothed_1d_free_energy(
-                s.fnc,
-                range=(0.0, 1.0),
-                ax=ax2,
-            )
-            ax2.set_xlabel("fraction of native contacts")
-            ax2.set_ylabel("free energy (arb. units)")
-            ax2.set_title(f"{s.name} - FNC free energy")
-            fig2.savefig(sample_dir / "fnc_free_energy.png", dpi=200)
-            plt.close(fig2)
+        #     # 3) BioEmu의 plot_smoothed_1d_free_energy로 그림 (기존 방식 유지)
+        #     fig2, ax2 = plt.subplots(figsize=(8, 4))
+        #     plot_smoothed_1d_free_energy(
+        #         s.fnc,
+        #         range=(0.0, 1.0),
+        #         ax=ax2,
+        #     )
+        #     ax2.set_xlabel("fraction of native contacts")
+        #     ax2.set_ylabel("free energy (arb. units)")
+        #     ax2.set_title(f"{s.name} - FNC free energy")
+        #     fig2.savefig(sample_dir / "fnc_free_energy.png", dpi=200)
+        #     plt.close(fig2)
 
 # ----------------------------------------------------------------------
 # FOLDING FREE ENERGIES (self-reference 버전)
@@ -482,7 +475,7 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                     "foldedness": s.foldedness,
                 }
             )
-            df.to_csv(sample_dir / "folding_fe_timeseries.csv", index=False)
+            # df.to_csv(sample_dir / "folding_fe_timeseries.csv", index=False)
 
             summary = {
                 "sample": s.name,
@@ -503,9 +496,9 @@ class FoldingFreeEnergyResults(BenchmarkResults):
 
             summaries.append(summary)
 
-        if summaries:
-            summary_df = pd.DataFrame(summaries)
-            summary_df.to_csv(output_dir / "all_samples_folding_fe_summary.csv", index=False)
+        # if summaries:
+        #     summary_df = pd.DataFrame(summaries)
+        #     summary_df.to_csv(output_dir / "all_samples_folding_fe_summary.csv", index=False)
 
     def plot(self, output_dir: Path) -> None:
         """
@@ -527,22 +520,22 @@ class FoldingFreeEnergyResults(BenchmarkResults):
             sample_dir.mkdir(parents=True, exist_ok=True)
 
             # 1) FNC vs Frame
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.plot(s.frame_idx, s.fnc)
-            ax.set_xlabel("Frame")
-            ax.set_ylabel("fraction of native contacts")
-            ax.set_title(f"{s.name} - FNC vs Frame")
-            fig.savefig(sample_dir / "fnc_vs_frame.png", dpi=200)
-            plt.close(fig)
+            # fig, ax = plt.subplots(figsize=(8, 4))
+            # ax.plot(s.frame_idx, s.fnc)
+            # ax.set_xlabel("Frame")
+            # ax.set_ylabel("fraction of native contacts")
+            # ax.set_title(f"{s.name} - FNC vs Frame")
+            # fig.savefig(sample_dir / "fnc_vs_frame.png", dpi=200)
+            # plt.close(fig)
 
-            # 2) foldedness vs Frame
-            fig2, ax2 = plt.subplots(figsize=(8, 4))
-            ax2.plot(s.frame_idx, s.foldedness)
-            ax2.set_xlabel("Frame")
-            ax2.set_ylabel("foldedness (p_fold)")
-            ax2.set_title(f"{s.name} - foldedness vs Frame")
-            fig2.savefig(sample_dir / "foldedness_vs_frame.png", dpi=200)
-            plt.close(fig2)
+            # # 2) foldedness vs Frame
+            # fig2, ax2 = plt.subplots(figsize=(8, 4))
+            # ax2.plot(s.frame_idx, s.foldedness)
+            # ax2.set_xlabel("Frame")
+            # ax2.set_ylabel("foldedness (p_fold)")
+            # ax2.set_title(f"{s.name} - foldedness vs Frame")
+            # fig2.savefig(sample_dir / "foldedness_vs_frame.png", dpi=200)
+            # plt.close(fig2)
 
             # 3) 우리가 직접 계산하는 FNC 1D free energy (–log p, arbitrary units)
             hist, edges = np.histogram(
@@ -574,10 +567,10 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                         "free_energy_arb": F,
                     }
                 )
-                df_grid.to_csv(
-                    sample_dir / "folding_fnc_free_energy_1d_grid.csv",
-                    index=False,
-                )
+                # df_grid.to_csv(
+                #     sample_dir / "folding_fnc_free_energy_1d_grid.csv",
+                #     index=False,
+                # )
 
                 # 프레임별 free energy
                 idx = np.searchsorted(edges, s.fnc, side="right") - 1
@@ -609,10 +602,10 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                         "free_energy_arb": fe_per_frame,
                     }
                 )
-                df_frames.to_csv(
-                    sample_dir / "folding_fnc_free_energy_1d_per_frame.csv",
-                    index=False,
-                )
+                # df_frames.to_csv(
+                #     sample_dir / "folding_fnc_free_energy_1d_per_frame.csv",
+                #     index=False,
+                # )
 
             # 4) 기존 BioEmu 스타일 1D free energy 플롯 (이미지용)
             fig3, ax3 = plt.subplots(figsize=(8, 4))
@@ -680,36 +673,36 @@ class TICAResults(BenchmarkResults):
         """
         각 샘플별 TICA 좌표를 CSV 로 저장.
         """
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # output_dir.mkdir(parents=True, exist_ok=True)
 
-        summaries = []
-        for s in self.samples:
-            sample_dir = output_dir / s.name
-            sample_dir.mkdir(parents=True, exist_ok=True)
+        # summaries = []
+        # for s in self.samples:
+        #     sample_dir = output_dir / s.name
+        #     sample_dir.mkdir(parents=True, exist_ok=True)
 
-            n_points = s.tica_xy.shape[0]
-            df = pd.DataFrame(
-                {
-                    "tica1": s.tica_xy[:, 0],
-                    "tica2": s.tica_xy[:, 1],
-                }
-            )
-            df.to_csv(sample_dir / "tica_coords.csv", index=False)
+        #     n_points = s.tica_xy.shape[0]
+        #     df = pd.DataFrame(
+        #         {
+        #             "tica1": s.tica_xy[:, 0],
+        #             "tica2": s.tica_xy[:, 1],
+        #         }
+        #     )
+        #     df.to_csv(sample_dir / "tica_coords.csv", index=False)
 
-            summary = {
-                "sample": s.name,
-                "n_points": int(n_points),
-                "tica1_mean": float(np.mean(s.tica_xy[:, 0])),
-                "tica2_mean": float(np.mean(s.tica_xy[:, 1])),
-            }
-            with open(sample_dir / "tica_summary.json", "w") as f:
-                json.dump(summary, f, indent=2, sort_keys=True)
+        #     summary = {
+        #         "sample": s.name,
+        #         "n_points": int(n_points),
+        #         "tica1_mean": float(np.mean(s.tica_xy[:, 0])),
+        #         "tica2_mean": float(np.mean(s.tica_xy[:, 1])),
+        #     }
+        #     with open(sample_dir / "tica_summary.json", "w") as f:
+        #         json.dump(summary, f, indent=2, sort_keys=True)
 
-            summaries.append(summary)
+        #     summaries.append(summary)
 
-        if summaries:
-            summary_df = pd.DataFrame(summaries)
-            summary_df.to_csv(output_dir / "all_samples_tica_summary.csv", index=False)
+        # if summaries:
+        #     summary_df = pd.DataFrame(summaries)
+        #     summary_df.to_csv(output_dir / "all_samples_tica_summary.csv", index=False)
 
     def plot(self, output_dir: Path) -> None:
         """
@@ -723,106 +716,106 @@ class TICAResults(BenchmarkResults):
         색 범위는 DistributionMetricSettings.energy_cutoff (기본 4 kcal/mol)
         까지만 보여주고, 샘플이 거의 없는 영역은 마스킹합니다.
         """
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # output_dir.mkdir(parents=True, exist_ok=True)
 
-        # BioEmu md_emulation 의 density 유틸 재사용
-        from bioemu_benchmarks.eval.md_emulation.state_metric import (
-            DistributionMetricSettings,
-            resample_with_noise,
-            histogram_bin_edges,
-            compute_density_2D,
-        )
+        # # BioEmu md_emulation 의 density 유틸 재사용
+        # from bioemu_benchmarks.eval.md_emulation.state_metric import (
+        #     DistributionMetricSettings,
+        #     resample_with_noise,
+        #     histogram_bin_edges,
+        #     compute_density_2D,
+        # )
 
-        settings = DistributionMetricSettings()
+        # settings = DistributionMetricSettings()
 
-        for s in self.samples:
-            sample_dir = output_dir / s.name
-            sample_dir.mkdir(parents=True, exist_ok=True)
+        # for s in self.samples:
+        #     sample_dir = output_dir / s.name
+        #     sample_dir.mkdir(parents=True, exist_ok=True)
 
-            xy = s.tica_xy
-            if xy.shape[0] < 10:
-                print(f"[WARN] {s.name}: TICA points < 10, free-energy plot 생략.")
-                continue
+        #     xy = s.tica_xy
+        #     if xy.shape[0] < 10:
+        #         print(f"[WARN] {s.name}: TICA points < 10, free-energy plot 생략.")
+        #         continue
 
-            # 1) resample + Gaussian noise (스무딩)
-            xy_noised = resample_with_noise(
-                xy,
-                num_samples=settings.n_resample,
-                sigma=settings.sigma_resample,
-                rng=None,
-            )
+        #     # 1) resample + Gaussian noise (스무딩)
+        #     xy_noised = resample_with_noise(
+        #         xy,
+        #         num_samples=settings.n_resample,
+        #         sigma=settings.sigma_resample,
+        #         rng=None,
+        #     )
 
-            # 2) bin edge 계산 (padding 포함)
-            edges_x = histogram_bin_edges(
-                xy_noised[:, 0],
-                num_bins=settings.num_bins,
-                padding=settings.padding,
-            )
-            edges_y = histogram_bin_edges(
-                xy_noised[:, 1],
-                num_bins=settings.num_bins,
-                padding=settings.padding,
-            )
+        #     # 2) bin edge 계산 (padding 포함)
+        #     edges_x = histogram_bin_edges(
+        #         xy_noised[:, 0],
+        #         num_bins=settings.num_bins,
+        #         padding=settings.padding,
+        #     )
+        #     edges_y = histogram_bin_edges(
+        #         xy_noised[:, 1],
+        #         num_bins=settings.num_bins,
+        #         padding=settings.padding,
+        #     )
 
-            # 3) density 계산 (이미 정규화된 p(x,y))
-            P = compute_density_2D(xy_noised, edges_x, edges_y)  # shape (nx, ny)
+        #     # 3) density 계산 (이미 정규화된 p(x,y))
+        #     P = compute_density_2D(xy_noised, edges_x, edges_y)  # shape (nx, ny)
 
-            # 4) free-energy surface: F = -k_B T ln p + const
-            kBT = K_BOLTZMANN * self.temperature_K
-            F = -kBT * np.log(P + 1e-12)
+        #     # 4) free-energy surface: F = -k_B T ln p + const
+        #     kBT = K_BOLTZMANN * self.temperature_K
+        #     F = -kBT * np.log(P + 1e-12)
 
-            finite = np.isfinite(F) & (P > 0.0)
-            if not np.any(finite):
-                print(f"[WARN] {s.name}: 유효한 density grid 가 없어 plot 생략.")
-                continue
+        #     finite = np.isfinite(F) & (P > 0.0)
+        #     if not np.any(finite):
+        #         print(f"[WARN] {s.name}: 유효한 density grid 가 없어 plot 생략.")
+        #         continue
 
-            # 최소값을 0으로 shift
-            F = F - np.nanmin(F[finite])
+        #     # 최소값을 0으로 shift
+        #     F = F - np.nanmin(F[finite])
 
-            # 디버깅용 로그 (shift 전/후는 큰 차이 없음)
-            F_fin = F[finite]
-            print(
-                f"[DEBUG] TICA_FE {s.name}: "
-                f"min(F)={F_fin.min():.3f} kcal/mol, "
-                f"max(F)={F_fin.max():.3f} kcal/mol, "
-                f"mean(F)={F_fin.mean():.3f} kcal/mol"
-            )
+        #     # 디버깅용 로그 (shift 전/후는 큰 차이 없음)
+        #     F_fin = F[finite]
+        #     print(
+        #         f"[DEBUG] TICA_FE {s.name}: "
+        #         f"min(F)={F_fin.min():.3f} kcal/mol, "
+        #         f"max(F)={F_fin.max():.3f} kcal/mol, "
+        #         f"mean(F)={F_fin.mean():.3f} kcal/mol"
+        #     )
 
-            # 5) 에너지 cutoff 및 마스킹
-            F_clipped = np.minimum(F, settings.energy_cutoff)
-            mask = P <= 0.0           # 샘플이 거의 없는 grid 는 가림
-            F_masked = np.ma.array(F_clipped, mask=mask)
+        #     # 5) 에너지 cutoff 및 마스킹
+        #     F_clipped = np.minimum(F, settings.energy_cutoff)
+        #     mask = P <= 0.0           # 샘플이 거의 없는 grid 는 가림
+        #     F_masked = np.ma.array(F_clipped, mask=mask)
 
-            # grid / density / FE 저장 (수치 확인용)
-            np.save(sample_dir / "tica_free_energy_F_raw.npy", F)
-            np.save(sample_dir / "tica_free_energy_F_clipped.npy", F_clipped)
-            np.save(sample_dir / "tica_free_energy_P.npy", P)
-            np.save(sample_dir / "tica_free_energy_xedges.npy", edges_x)
-            np.save(sample_dir / "tica_free_energy_yedges.npy", edges_y)
+        #     # grid / density / FE 저장 (수치 확인용)
+        #     np.save(sample_dir / "tica_free_energy_F_raw.npy", F)
+        #     np.save(sample_dir / "tica_free_energy_F_clipped.npy", F_clipped)
+        #     np.save(sample_dir / "tica_free_energy_P.npy", P)
+        #     np.save(sample_dir / "tica_free_energy_xedges.npy", edges_x)
+        #     np.save(sample_dir / "tica_free_energy_yedges.npy", edges_y)
 
-            # 6) bin center 좌표
-            xc = 0.5 * (edges_x[:-1] + edges_x[1:])
-            yc = 0.5 * (edges_y[:-1] + edges_y[1:])
-            Xc, Yc = np.meshgrid(xc, yc, indexing="ij")
+        #     # 6) bin center 좌표
+        #     xc = 0.5 * (edges_x[:-1] + edges_x[1:])
+        #     yc = 0.5 * (edges_y[:-1] + edges_y[1:])
+        #     Xc, Yc = np.meshgrid(xc, yc, indexing="ij")
 
-            # 7) contourf 로 free-energy surface 시각화
-            fig, ax = plt.subplots(figsize=(4, 4))
-            cf = ax.contourf(
-                Xc,
-                Yc,
-                F_masked,
-                levels=20,
-                cmap="hot",
-            )
-            cbar = fig.colorbar(cf, ax=ax)
-            cbar.set_label("free energy (kcal/mol)")
+        #     # 7) contourf 로 free-energy surface 시각화
+        #     fig, ax = plt.subplots(figsize=(4, 4))
+        #     cf = ax.contourf(
+        #         Xc,
+        #         Yc,
+        #         F_masked,
+        #         levels=20,
+        #         cmap="hot",
+        #     )
+        #     cbar = fig.colorbar(cf, ax=ax)
+        #     cbar.set_label("free energy (kcal/mol)")
 
-            ax.set_xlabel("TICA 1")
-            ax.set_ylabel("TICA 2")
-            ax.set_title(f"{s.name} - TICA 2D free energy")
+        #     ax.set_xlabel("TICA 1")
+        #     ax.set_ylabel("TICA 2")
+        #     ax.set_title(f"{s.name} - TICA 2D free energy")
 
-            fig.savefig(sample_dir / "tica_free_energy.png", dpi=300, bbox_inches="tight")
-            plt.close(fig)
+        #     fig.savefig(sample_dir / "tica_free_energy.png", dpi=300, bbox_inches="tight")
+        #     plt.close(fig)
 
 # ----------------------------------------------------------------------
 # MD EMULATION SELF (contact-map 기반 2D projection free-energy)
@@ -928,10 +921,12 @@ class MDEmulationSelfResults(BenchmarkResults):
         binning / density / cutoff / mask / 색상 로직을 사용한다.
 
         절차:
-          1) DistributionMetrics2D(reference_projections = proj_xy) 를 생성
-          2) metric.density_ref, metric.low_energy_mask, metric.edges_x/y 사용
-          3) F = -k_B T ln p 에서 최소값을 0 으로 shift
-          4) energy_cutoff 까지 turbo 컬러맵으로, 그 이상은 흰색(set_over)으로 표시
+        1) DistributionMetrics2D(reference_projections = proj_xy) 를 생성
+        2) metric.density_ref, metric.low_energy_mask, metric.edges_x/y 사용
+        3) F = -k_B T ln p 에서 최소값을 0 으로 shift
+        4) energy_cutoff 까지 turbo 컬러맵으로, 그 이상은 흰색(set_over)으로 표시
+        5) 각 frame 의 (proj1, proj2) 가 어느 bin 에 속하는지 찾아 그 bin 의 F 를
+            per-frame free energy 로 써서 md_emulation_proj2d.csv 에 free_energy 열 추가
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -951,7 +946,7 @@ class MDEmulationSelfResults(BenchmarkResults):
             sample_dir = output_dir / s.name
             sample_dir.mkdir(parents=True, exist_ok=True)
 
-            xy = s.proj_xy
+            xy = s.proj_xy                        # shape (n_frames, 2)
             if xy.shape[0] < 10:
                 print(
                     f"[WARN] {s.name}: projection points < 10, "
@@ -968,7 +963,7 @@ class MDEmulationSelfResults(BenchmarkResults):
                 energy_cutoff=settings.energy_cutoff,
                 temperature_K=self.temperature_K,
                 padding=settings.padding,
-                random_seed=42,  # 재현성 필요하면 정수 seed 로 변경
+                random_seed=42,
             )
 
             # 2) metric 이 내부에서 계산한 density / mask / bin edge 사용
@@ -998,14 +993,44 @@ class MDEmulationSelfResults(BenchmarkResults):
             )
 
             # 4) 원본 로직에 맞춰 cutoff 및 mask 적용
-            #    - max_energy 를 넘는 부분은 max_energy+1 로 잘라서 "over" 색(흰색) 활용
             F_for_plot = np.minimum(F, max_energy + 1.0)
 
             # low_energy_mask 바깥 + P<=0 인 grid 는 plot 에서 가린다
             mask = (P <= 0.0) | (~low_mask)
             F_masked = np.ma.array(F_for_plot, mask=mask)
 
-            # 수치 저장
+            # ---------- 여기부터: 각 frame 의 free energy 계산 및 CSV 저장 ----------
+
+            # bin index (x: 0..nx-1, y: 0..ny-1) 찾기
+            # np.digitize 는 histogram2d 의 bin 정의와 호환되는 방식이므로 그대로 사용 가능
+            ix = np.digitize(xy[:, 0], edges_x) - 1  # shape (n_frames,)
+            iy = np.digitize(xy[:, 1], edges_y) - 1
+
+            # 범위를 벗어난 인덱스는 가장자리 bin 으로 클램프
+            nx, ny = P.shape
+            ix = np.clip(ix, 0, nx - 1)
+            iy = np.clip(iy, 0, ny - 1)
+
+            # per-frame free energy 배열 초기화 (기본값은 NaN)
+            frame_F = np.full(xy.shape[0], np.nan, dtype=float)
+
+            # 유효 bin (density>0 이고 low_mask=True) 인 frame 에만 F 할당
+            valid_bins = (P[ix, iy] > 0.0) & (low_mask[ix, iy])
+            frame_F[valid_bins] = F[ix[valid_bins], iy[valid_bins]]
+
+            # md_emulation_proj2d.csv 파일을 "proj1, proj2, free_energy" 로 다시 저장
+            df_proj = pd.DataFrame(
+                {
+                    "proj1": xy[:, 0],
+                    "proj2": xy[:, 1],
+                    "free_energy": frame_F,  # 단위: kcal/mol, min(F)=0 로 shift 된 값
+                }
+            )
+            df_proj.to_csv(sample_dir / "md_emulation_proj2d.csv", index=False)
+
+            # ---------- 여기까지: per-frame free energy 저장 ----------
+
+            # 수치 저장 (grid 형태)
             np.save(sample_dir / "md_emulation_free_energy_F_raw.npy", F)
             np.save(sample_dir / "md_emulation_free_energy_F_plot.npy", F_for_plot)
             np.save(sample_dir / "md_emulation_free_energy_P.npy", P)
@@ -1032,8 +1057,6 @@ class MDEmulationSelfResults(BenchmarkResults):
                 vmin=0.0,
                 vmax=max_energy,
             )
-            # vmin/vmax 범위는 0 ~ max_energy,
-            # 그 이상은 "over" 색(흰색)으로 표시
             cf.set_clim(0.0, max_energy)
 
             cbar = fig.colorbar(cf, ax=ax, extend="max")
@@ -1048,4 +1071,155 @@ class MDEmulationSelfResults(BenchmarkResults):
                 dpi=300,
                 bbox_inches="tight",
             )
+            plt.close(fig)
+
+
+# ----------------------------------------------------------------------
+# DSSP SELF (reference 없이 sample 자체 DSSP 통계)
+# ----------------------------------------------------------------------
+
+@dataclass
+class SingleSampleDSSP:
+    """
+    한 샘플(trajectory)에 대한 DSSP 정보.
+
+    name        : 샘플 이름
+    frame_idx   : 프레임 인덱스 (0, 1, 2, ...)
+    dssp_codes  : shape (n_frames, n_residues), 각 원소는 1글자 DSSP 코드('H','E','C',...)
+    helix_frac  : 각 프레임에서 헬릭스(H/G/I) 비율 (0~1)
+    sheet_frac  : 각 프레임에서 시트(E/B) 비율 (0~1)
+    coil_frac   : 각 프레임에서 나머지(코일/턴 등) 비율 (0~1)
+    """
+    name: str
+    frame_idx: np.ndarray
+    dssp_codes: np.ndarray
+    helix_frac: np.ndarray
+    sheet_frac: np.ndarray
+    coil_frac: np.ndarray
+
+
+@dataclass
+class DSSPResults(BenchmarkResults):
+    """
+    여러 샘플에 대해 self DSSP 를 계산한 결과 모음.
+    """
+    samples: List[SingleSampleDSSP]
+
+    def get_aggregate_metrics(self) -> Dict[str, float]:
+        if not self.samples:
+            return {}
+
+        helix_means = np.array([s.helix_frac.mean() for s in self.samples], dtype=float)
+        sheet_means = np.array([s.sheet_frac.mean() for s in self.samples], dtype=float)
+        coil_means  = np.array([s.coil_frac.mean()  for s in self.samples], dtype=float)
+
+        return {
+            "num_samples": float(len(self.samples)),
+            "helix_frac_mean_over_samples": float(helix_means.mean()),
+            "helix_frac_std_over_samples": float(helix_means.std()),
+            "sheet_frac_mean_over_samples": float(sheet_means.mean()),
+            "sheet_frac_std_over_samples": float(sheet_means.std()),
+            "coil_frac_mean_over_samples": float(coil_means.mean()),
+            "coil_frac_std_over_samples": float(coil_means.std()),
+        }
+
+    def save_results(self, output_dir: Path) -> None:
+        """
+        샘플별 DSSP 코드와 헬릭스/시트/코일 비율을 저장.
+        - dssp_codes.npy : (n_frames, n_residues) 문자열 배열
+        - dssp_fractions.csv : frame, helix_frac, sheet_frac, coil_frac
+        - dssp_summary.json : 간단한 요약 통계
+        """
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        summaries = []
+        for s in self.samples:
+            sample_dir = output_dir / s.name
+            sample_dir.mkdir(parents=True, exist_ok=True)
+
+            # 1) 전체 DSSP 코드 저장 (numpy 배열)
+            np.save(sample_dir / "dssp_codes.npy", s.dssp_codes)
+
+            # 2) per-frame 비율 CSV
+            df_frac = pd.DataFrame(
+                {
+                    "frame": s.frame_idx,
+                    "helix_frac": s.helix_frac,
+                    "sheet_frac": s.sheet_frac,
+                    "coil_frac": s.coil_frac,
+                }
+            )
+            df_frac.to_csv(sample_dir / "dssp_fractions.csv", index=False)
+
+            # 3) 요약 통계 JSON
+            summary = {
+                "sample": s.name,
+                "n_frames": int(len(s.frame_idx)),
+                "helix_frac_mean": float(s.helix_frac.mean()),
+                "helix_frac_std": float(s.helix_frac.std()),
+                "sheet_frac_mean": float(s.sheet_frac.mean()),
+                "sheet_frac_std": float(s.sheet_frac.std()),
+                "coil_frac_mean": float(s.coil_frac.mean()),
+                "coil_frac_std": float(s.coil_frac.std()),
+            }
+            with open(sample_dir / "dssp_summary.json", "w") as f:
+                json.dump(summary, f, indent=2, sort_keys=True)
+
+            summaries.append(summary)
+
+        # 전체 샘플 요약 CSV
+        if summaries:
+            summary_df = pd.DataFrame(summaries)
+            summary_df.to_csv(output_dir / "all_samples_dssp_summary.csv", index=False)
+
+    def plot(self, output_dir: Path) -> None:
+        """
+        각 샘플마다:
+        - residue index vs helix/sheet 점유율(프레임 평균)
+        (coil 은 계산만 하고 플롯에는 그리지 않음)
+        """
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        helix_codes = np.array(["H", "G", "I"], dtype="<U1")
+        sheet_codes = np.array(["E", "B"], dtype="<U1")
+
+        for s in self.samples:
+            sample_dir = output_dir / s.name
+            sample_dir.mkdir(parents=True, exist_ok=True)
+
+            dssp_codes = s.dssp_codes  # shape: (n_frames, n_residues)
+            if dssp_codes.ndim != 2:
+                continue
+
+            n_frames, n_residues = dssp_codes.shape
+            if n_residues == 0:
+                continue
+
+            # 잔기별 helix / sheet / coil 점유율 계산 (프레임 평균)
+            helix_mask = np.isin(dssp_codes, helix_codes)   # (T, N)
+            sheet_mask = np.isin(dssp_codes, sheet_codes)   # (T, N)
+
+            helix_prob_per_res = helix_mask.mean(axis=0)    # shape: (N,)
+            sheet_prob_per_res = sheet_mask.mean(axis=0)    # shape: (N,)
+
+            resid_idx = np.arange(n_residues)
+
+            # helix / sheet 두 패널만 그림
+            fig, (ax1, ax2) = plt.subplots(
+                2, 1, sharex=True, figsize=(3, 3), constrained_layout=True
+            )
+
+            # 위: helix 점유율
+            ax1.plot(resid_idx, helix_prob_per_res, linewidth=1)
+            ax1.set_ylim(0.0, 1.0)
+            ax1.set_ylabel("helix")
+            ax1.set_title(s.name)
+
+            # 아래: sheet 점유율
+            ax2.plot(resid_idx, sheet_prob_per_res, linewidth=1)
+            ax2.set_ylim(0.0, 1.0)
+            ax2.set_ylabel("sheet")
+            ax2.set_xlabel("residue index")
+
+            fig.savefig(sample_dir / "dssp_per_residue.png", dpi=200)
             plt.close(fig)

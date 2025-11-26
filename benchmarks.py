@@ -9,6 +9,7 @@ class Benchmark(str, Enum):
     FOLDING_FREE_ENERGIES = "folding_free_energies"
     TICA_LANDSCAPE = "tica_landscape"
     MD_EMULATION_SELF = "md_emulation_self"
+    DSSP_SELF = "dssp_self"
     
 BENCHMARK_CHOICES: list[str] = [b.value for b in Benchmark] + ["all"]
 

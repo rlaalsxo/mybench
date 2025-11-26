@@ -11,6 +11,7 @@ from eval.fnc_self import evaluate_fnc_self
 from eval.folding_free_energies_self import evaluate_folding_free_energies_self
 from eval.tica_landscape import evaluate_tica_landscape
 from eval.md_emulation_self import evaluate_md_emulation_self
+from eval.dssp_self import evaluate_dssp_self
 
 Evaluator = Callable[[Iterable[SampleSpec]], BenchmarkResults]
 
@@ -26,5 +27,7 @@ def evaluator_from_benchmark(benchmark: Benchmark, **kwargs) -> Evaluator:
         return partial(evaluate_tica_landscape, **kwargs)
     elif benchmark == Benchmark.MD_EMULATION_SELF:
         return partial(evaluate_md_emulation_self, **kwargs)
+    elif benchmark == Benchmark.DSSP_SELF:
+        return partial(evaluate_dssp_self, **kwargs)
     else:
         raise ValueError(f"Unrecognized benchmark {benchmark}")
