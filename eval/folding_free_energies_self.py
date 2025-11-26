@@ -157,6 +157,10 @@ def evaluate_folding_free_energies_self(
             p_fold_thr=p_fold_thr,
             steepness=steepness,
         )
+        print(
+            f"[DEBUG] FOLDING_FE_SELF: {spec.name} "
+            f"p_fold_mean={p_fold_mean:.4f}, dG={dg:.4f} kcal/mol"
+        )
 
         metrics_list.append(
             SingleSampleFoldingFE(

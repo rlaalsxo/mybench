@@ -288,6 +288,10 @@ class FNCResults(BenchmarkResults):
         각 샘플마다:
         - FNC vs Frame
         - FNC 기반 1D free energy (–log p(FNC), 0~1 구간, 임의 단위)
+
+        추가로:
+        - bin 기반 free energy 그리드 및 확률을 CSV로 저장
+        - 각 프레임별 free energy 값을 CSV로 저장
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -312,7 +316,78 @@ class FNCResults(BenchmarkResults):
             fig.savefig(sample_dir / "fnc_vs_frame.png", dpi=200)
             plt.close(fig)
 
-            # 2) FNC free energy (1D, –log p, arb. units)
+            # 2) 우리가 직접 계산하는 1D free energy (–log p, arbitrary units)
+            #    - histogram: [0,1] 구간, 50 bins, density=True
+            hist, edges = np.histogram(
+                s.fnc,
+                bins=50,
+                range=(0.0, 1.0),
+                density=True,
+            )
+            centers = 0.5 * (edges[:-1] + edges[1:])   # bin center
+            P = hist                                  # density=True → 확률밀도 (적분 1)
+            F = -np.log(P + 1e-12)                    # –log p, 임의 단위
+
+            finite = np.isfinite(F)
+            if np.any(finite):
+                F = F - np.min(F[finite])             # 최소값을 0으로 shift
+
+                F_fin = F[finite]
+                print(
+                    f"[DEBUG] FNC_FE_1D_GRID {s.name}: "
+                    f"min(F_grid)={F_fin.min():.3f}, "
+                    f"max(F_grid)={F_fin.max():.3f}, "
+                    f"mean(F_grid)={F_fin.mean():.3f}"
+                )
+
+                # bin 기반 free energy 그리드 CSV
+                df_grid = pd.DataFrame(
+                    {
+                        "fnc_center": centers,
+                        "prob_density": P,
+                        "free_energy_arb": F,
+                    }
+                )
+                df_grid.to_csv(
+                    sample_dir / "fnc_free_energy_1d_grid.csv",
+                    index=False,
+                )
+
+                # 각 프레임별 free energy (해당 bin의 F 값 부여)
+                idx = np.searchsorted(edges, s.fnc, side="right") - 1
+                valid = (idx >= 0) & (idx < F.shape[0])
+
+                fe_per_frame = np.full(s.fnc.shape, np.nan, dtype=float)
+                fe_per_frame[valid] = F[idx[valid]]
+
+                fe_valid = fe_per_frame[np.isfinite(fe_per_frame)]
+                if fe_valid.size > 0:
+                    print(
+                        f"[DEBUG] FNC_FE_1D_FRAMES {s.name}: "
+                        f"min(F_frame)={fe_valid.min():.3f}, "
+                        f"max(F_frame)={fe_valid.max():.3f}, "
+                        f"mean(F_frame)={fe_valid.mean():.3f}, "
+                        f"n_valid={fe_valid.size}/{fe_per_frame.size}"
+                    )
+                else:
+                    print(
+                        f"[DEBUG] FNC_FE_1D_FRAMES {s.name}: "
+                        f"no valid frame free energies (all NaN)."
+                    )
+
+                df_frames = pd.DataFrame(
+                    {
+                        "frame": s.frame_idx,
+                        "fnc": s.fnc,
+                        "free_energy_arb": fe_per_frame,
+                    }
+                )
+                df_frames.to_csv(
+                    sample_dir / "fnc_free_energy_1d_per_frame.csv",
+                    index=False,
+                )
+
+            # 3) BioEmu의 plot_smoothed_1d_free_energy로 그림 (기존 방식 유지)
             fig2, ax2 = plt.subplots(figsize=(8, 4))
             plot_smoothed_1d_free_energy(
                 s.fnc,
@@ -324,7 +399,6 @@ class FNCResults(BenchmarkResults):
             ax2.set_title(f"{s.name} - FNC free energy")
             fig2.savefig(sample_dir / "fnc_free_energy.png", dpi=200)
             plt.close(fig2)
-
 
 # ----------------------------------------------------------------------
 # FOLDING FREE ENERGIES (self-reference 버전)
@@ -439,6 +513,10 @@ class FoldingFreeEnergyResults(BenchmarkResults):
         - FNC vs Frame
         - foldedness vs Frame
         - FNC 기반 1D free energy (–log p(FNC), 0~1 구간, 임의 단위)
+
+        추가로:
+        - FNC 1D free energy 그리드 및 확률 CSV
+        - 각 프레임별 FNC free energy CSV
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -466,7 +544,77 @@ class FoldingFreeEnergyResults(BenchmarkResults):
             fig2.savefig(sample_dir / "foldedness_vs_frame.png", dpi=200)
             plt.close(fig2)
 
-            # 3) FNC free energy (1D, –log p, arb. units)
+            # 3) 우리가 직접 계산하는 FNC 1D free energy (–log p, arbitrary units)
+            hist, edges = np.histogram(
+                s.fnc,
+                bins=50,
+                range=(0.0, 1.0),
+                density=True,
+            )
+            centers = 0.5 * (edges[:-1] + edges[1:])
+            P = hist
+            F = -np.log(P + 1e-12)
+
+            finite = np.isfinite(F)
+            if np.any(finite):
+                F = F - np.min(F[finite])
+
+                F_fin = F[finite]
+                print(
+                    f"[DEBUG] FOLDING_FNC_FE_1D_GRID {s.name}: "
+                    f"min(F_grid)={F_fin.min():.3f}, "
+                    f"max(F_grid)={F_fin.max():.3f}, "
+                    f"mean(F_grid)={F_fin.mean():.3f}"
+                )
+
+                df_grid = pd.DataFrame(
+                    {
+                        "fnc_center": centers,
+                        "prob_density": P,
+                        "free_energy_arb": F,
+                    }
+                )
+                df_grid.to_csv(
+                    sample_dir / "folding_fnc_free_energy_1d_grid.csv",
+                    index=False,
+                )
+
+                # 프레임별 free energy
+                idx = np.searchsorted(edges, s.fnc, side="right") - 1
+                valid = (idx >= 0) & (idx < F.shape[0])
+
+                fe_per_frame = np.full(s.fnc.shape, np.nan, dtype=float)
+                fe_per_frame[valid] = F[idx[valid]]
+
+                fe_valid = fe_per_frame[np.isfinite(fe_per_frame)]
+                if fe_valid.size > 0:
+                    print(
+                        f"[DEBUG] FOLDING_FNC_FE_1D_FRAMES {s.name}: "
+                        f"min(F_frame)={fe_valid.min():.3f}, "
+                        f"max(F_frame)={fe_valid.max():.3f}, "
+                        f"mean(F_frame)={fe_valid.mean():.3f}, "
+                        f"n_valid={fe_valid.size}/{fe_per_frame.size}"
+                    )
+                else:
+                    print(
+                        f"[DEBUG] FOLDING_FNC_FE_1D_FRAMES {s.name}: "
+                        f"no valid frame free energies (all NaN)."
+                    )
+
+                df_frames = pd.DataFrame(
+                    {
+                        "frame": s.frame_idx,
+                        "fnc": s.fnc,
+                        "foldedness": s.foldedness,
+                        "free_energy_arb": fe_per_frame,
+                    }
+                )
+                df_frames.to_csv(
+                    sample_dir / "folding_fnc_free_energy_1d_per_frame.csv",
+                    index=False,
+                )
+
+            # 4) 기존 BioEmu 스타일 1D free energy 플롯 (이미지용)
             fig3, ax3 = plt.subplots(figsize=(8, 4))
             plot_smoothed_1d_free_energy(
                 s.fnc,
@@ -478,7 +626,6 @@ class FoldingFreeEnergyResults(BenchmarkResults):
             ax3.set_title(f"{s.name} - FNC free energy")
             fig3.savefig(sample_dir / "fnc_free_energy.png", dpi=200)
             plt.close(fig3)
-
 
 # ----------------------------------------------------------------------
 # TICA 기반 2D free energy landscape
@@ -567,13 +714,26 @@ class TICAResults(BenchmarkResults):
     def plot(self, output_dir: Path) -> None:
         """
         각 샘플마다:
-        - TICA1 vs TICA2 2D free-energy surface (히스토그램 기반 -k_B T ln p)
-        를 그림으로 저장.
+        - TICA1 vs TICA2 2D free-energy surface
 
-        논문 Fig. 3(a)에 나오는 free energy surfaces (in kcal/mol)에
-        대응하는 형태로, 색상 단위는 kcal/mol 입니다.
+        BioEmu MD emulation metric 에서 쓰는 것과 동일한 방식으로
+        분포를 resample + Gaussian noise 로 스무딩한 뒤,
+        F(x, y) = -k_B T ln p(x, y) 를 계산합니다.
+
+        색 범위는 DistributionMetricSettings.energy_cutoff (기본 4 kcal/mol)
+        까지만 보여주고, 샘플이 거의 없는 영역은 마스킹합니다.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        # BioEmu md_emulation 의 density 유틸 재사용
+        from bioemu_benchmarks.eval.md_emulation.state_metric import (
+            DistributionMetricSettings,
+            resample_with_noise,
+            histogram_bin_edges,
+            compute_density_2D,
+        )
+
+        settings = DistributionMetricSettings()
 
         for s in self.samples:
             sample_dir = output_dir / s.name
@@ -581,40 +741,79 @@ class TICAResults(BenchmarkResults):
 
             xy = s.tica_xy
             if xy.shape[0] < 10:
-                # 너무 적으면 의미 있는 분포가 안 나옴
                 print(f"[WARN] {s.name}: TICA points < 10, free-energy plot 생략.")
                 continue
 
-            x = xy[:, 0]
-            y = xy[:, 1]
+            # 1) resample + Gaussian noise (스무딩)
+            xy_noised = resample_with_noise(
+                xy,
+                num_samples=settings.n_resample,
+                sigma=settings.sigma_resample,
+                rng=None,
+            )
 
-            # 2D 히스토그램 → 확률
-            nbins = 50
-            H, xedges, yedges = np.histogram2d(x, y, bins=nbins)
-            H = H.astype(float)
+            # 2) bin edge 계산 (padding 포함)
+            edges_x = histogram_bin_edges(
+                xy_noised[:, 0],
+                num_bins=settings.num_bins,
+                padding=settings.padding,
+            )
+            edges_y = histogram_bin_edges(
+                xy_noised[:, 1],
+                num_bins=settings.num_bins,
+                padding=settings.padding,
+            )
 
-            total_counts = H.sum()
-            if total_counts <= 0:
+            # 3) density 계산 (이미 정규화된 p(x,y))
+            P = compute_density_2D(xy_noised, edges_x, edges_y)  # shape (nx, ny)
+
+            # 4) free-energy surface: F = -k_B T ln p + const
+            kBT = K_BOLTZMANN * self.temperature_K
+            F = -kBT * np.log(P + 1e-12)
+
+            finite = np.isfinite(F) & (P > 0.0)
+            if not np.any(finite):
+                print(f"[WARN] {s.name}: 유효한 density grid 가 없어 plot 생략.")
                 continue
 
-            P = H / total_counts  # 정규화된 확률분포 p(x, y)
+            # 최소값을 0으로 shift
+            F = F - np.nanmin(F[finite])
 
-            # free-energy surface: F = -k_B T ln p + const (kcal/mol)
-            F = -K_BOLTZMANN * self.temperature_K * np.log(P + 1e-12)
+            # 디버깅용 로그 (shift 전/후는 큰 차이 없음)
+            F_fin = F[finite]
+            print(
+                f"[DEBUG] TICA_FE {s.name}: "
+                f"min(F)={F_fin.min():.3f} kcal/mol, "
+                f"max(F)={F_fin.max():.3f} kcal/mol, "
+                f"mean(F)={F_fin.mean():.3f} kcal/mol"
+            )
 
-            # 최소값을 0으로 맞춤 (상수항 제거)
-            finite_mask = np.isfinite(F)
-            if np.any(finite_mask):
-                F = F - np.nanmin(F[finite_mask])
+            # 5) 에너지 cutoff 및 마스킹
+            F_clipped = np.minimum(F, settings.energy_cutoff)
+            mask = P <= 0.0           # 샘플이 거의 없는 grid 는 가림
+            F_masked = np.ma.array(F_clipped, mask=mask)
 
-            # bin center 좌표
-            xc = 0.5 * (xedges[:-1] + xedges[1:])
-            yc = 0.5 * (yedges[:-1] + yedges[1:])
+            # grid / density / FE 저장 (수치 확인용)
+            np.save(sample_dir / "tica_free_energy_F_raw.npy", F)
+            np.save(sample_dir / "tica_free_energy_F_clipped.npy", F_clipped)
+            np.save(sample_dir / "tica_free_energy_P.npy", P)
+            np.save(sample_dir / "tica_free_energy_xedges.npy", edges_x)
+            np.save(sample_dir / "tica_free_energy_yedges.npy", edges_y)
+
+            # 6) bin center 좌표
+            xc = 0.5 * (edges_x[:-1] + edges_x[1:])
+            yc = 0.5 * (edges_y[:-1] + edges_y[1:])
             Xc, Yc = np.meshgrid(xc, yc, indexing="ij")
 
+            # 7) contourf 로 free-energy surface 시각화
             fig, ax = plt.subplots(figsize=(4, 4))
-            # contourf 로 색채우기
-            cf = ax.contourf(Xc, Yc, F, levels=20)
+            cf = ax.contourf(
+                Xc,
+                Yc,
+                F_masked,
+                levels=20,
+                cmap="hot",
+            )
             cbar = fig.colorbar(cf, ax=ax)
             cbar.set_label("free energy (kcal/mol)")
 
@@ -718,17 +917,35 @@ class MDEmulationSelfResults(BenchmarkResults):
                 index=False,
             )
 
+    # results.py 내부, MDEmulationSelfResults 클래스의 plot 메서드만 교체
+
     def plot(self, output_dir: Path) -> None:
         """
         각 샘플마다:
-        - proj1 vs proj2 2D free-energy surface (히스토그램 기반 F = -k_B T ln p)
-        를 그림으로 저장.
+        - proj1 vs proj2 2D free-energy surface (F = -k_B T ln p + const)
 
-        TICAResults.plot 과 동일한 방식이지만,
-        투영 좌표가 contact-map 기반 PCA 라는 점만 다릅니다.
-        색상 단위는 kcal/mol 입니다.
+        BioEmu MD emulation metric (DistributionMetrics2D) 과 동일한
+        binning / density / cutoff / mask / 색상 로직을 사용한다.
+
+        절차:
+          1) DistributionMetrics2D(reference_projections = proj_xy) 를 생성
+          2) metric.density_ref, metric.low_energy_mask, metric.edges_x/y 사용
+          3) F = -k_B T ln p 에서 최소값을 0 으로 shift
+          4) energy_cutoff 까지 turbo 컬러맵으로, 그 이상은 흰색(set_over)으로 표시
         """
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        import copy
+        import matplotlib.pyplot as plt
+
+        from bioemu_benchmarks.eval.md_emulation.state_metric import (
+            DistributionMetricSettings,
+            DistributionMetrics2D,
+        )
+
+        settings = DistributionMetricSettings()
+        max_energy = settings.energy_cutoff  # 원본 metric에서 사용하는 cutoff
+        levels = 20                          # contour level 수 (원하면 조절 가능)
 
         for s in self.samples:
             sample_dir = output_dir / s.name
@@ -742,40 +959,88 @@ class MDEmulationSelfResults(BenchmarkResults):
                 )
                 continue
 
-            x = xy[:, 0]
-            y = xy[:, 1]
+            # 1) DistributionMetrics2D 를 "레퍼런스 = 자기 자신"으로 생성
+            metric = DistributionMetrics2D(
+                reference_projections=xy,
+                n_resample=settings.n_resample,
+                sigma_resample=settings.sigma_resample,
+                num_bins=settings.num_bins,
+                energy_cutoff=settings.energy_cutoff,
+                temperature_K=self.temperature_K,
+                padding=settings.padding,
+                random_seed=42,  # 재현성 필요하면 정수 seed 로 변경
+            )
 
-            # 2D 히스토그램 → 확률
-            nbins = 50
-            H, xedges, yedges = np.histogram2d(x, y, bins=nbins)
-            H = H.astype(float)
+            # 2) metric 이 내부에서 계산한 density / mask / bin edge 사용
+            P = metric.density_ref           # shape (nx, ny)
+            low_mask = metric.low_energy_mask
+            edges_x = metric.edges_x
+            edges_y = metric.edges_y
 
-            total_counts = H.sum()
-            if total_counts <= 0:
+            # 3) free-energy surface: F = -k_B T ln p
+            kBT = K_BOLTZMANN * self.temperature_K
+            F = -kBT * np.log(P + 1e-12)
+
+            # 유효한 grid (P>0) 에서 최소값을 0 으로 shift
+            finite = np.isfinite(F) & (P > 0.0)
+            if not np.any(finite):
+                print(f"[WARN] {s.name}: 유효한 density grid 가 없어 plot 생략.")
                 continue
 
-            P = H / total_counts  # p(x, y)
+            F = F - np.nanmin(F[finite])
 
-            # free-energy surface: F = -k_B T ln p + const (kcal/mol)
-            F = -K_BOLTZMANN * self.temperature_K * np.log(P + 1e-12)
+            F_fin = F[finite]
+            print(
+                f"[DEBUG] MD_EMU_SELF_FE {s.name}: "
+                f"min(F)={F_fin.min():.3f} kcal/mol, "
+                f"max(F)={F_fin.max():.3f} kcal/mol, "
+                f"mean(F)={F_fin.mean():.3f} kcal/mol"
+            )
 
-            # 최소값을 0으로 shift
-            finite_mask = np.isfinite(F)
-            if np.any(finite_mask):
-                F = F - np.nanmin(F[finite_mask])
+            # 4) 원본 로직에 맞춰 cutoff 및 mask 적용
+            #    - max_energy 를 넘는 부분은 max_energy+1 로 잘라서 "over" 색(흰색) 활용
+            F_for_plot = np.minimum(F, max_energy + 1.0)
 
-            # bin center 좌표
-            xc = 0.5 * (xedges[:-1] + xedges[1:])
-            yc = 0.5 * (yedges[:-1] + yedges[1:])
+            # low_energy_mask 바깥 + P<=0 인 grid 는 plot 에서 가린다
+            mask = (P <= 0.0) | (~low_mask)
+            F_masked = np.ma.array(F_for_plot, mask=mask)
+
+            # 수치 저장
+            np.save(sample_dir / "md_emulation_free_energy_F_raw.npy", F)
+            np.save(sample_dir / "md_emulation_free_energy_F_plot.npy", F_for_plot)
+            np.save(sample_dir / "md_emulation_free_energy_P.npy", P)
+            np.save(sample_dir / "md_emulation_free_energy_low_mask.npy", low_mask)
+            np.save(sample_dir / "md_emulation_free_energy_xedges.npy", edges_x)
+            np.save(sample_dir / "md_emulation_free_energy_yedges.npy", edges_y)
+
+            # 5) bin center 좌표 (DistributionMetrics2D 는 grid 를 따로 만들지 않으므로 직접 생성)
+            xc = 0.5 * (edges_x[:-1] + edges_x[1:])
+            yc = 0.5 * (edges_y[:-1] + edges_y[1:])
             Xc, Yc = np.meshgrid(xc, yc, indexing="ij")
 
+            # 6) turbo 컬러맵 + set_over("w") 로 원본과 같은 색상 로직 적용
+            cmap = copy.copy(plt.cm.turbo)
+            cmap.set_over(color="w")
+
             fig, ax = plt.subplots(figsize=(4, 4))
-            cf = ax.contourf(Xc, Yc, F, levels=20)
-            cbar = fig.colorbar(cf, ax=ax)
+            cf = ax.contourf(
+                Xc,
+                Yc,
+                F_masked,
+                levels=levels,
+                cmap=cmap,
+                vmin=0.0,
+                vmax=max_energy,
+            )
+            # vmin/vmax 범위는 0 ~ max_energy,
+            # 그 이상은 "over" 색(흰색)으로 표시
+            cf.set_clim(0.0, max_energy)
+
+            cbar = fig.colorbar(cf, ax=ax, extend="max")
             cbar.set_label("free energy (kcal/mol)")
 
-            ax.set_xlabel("projection 1")
-            ax.set_ylabel("projection 2")
+            ax.set_xlabel("PCA 1")
+            ax.set_ylabel("PCA 2")
             ax.set_title(f"{s.name} - MD emulation 2D free energy (self)")
 
             fig.savefig(
