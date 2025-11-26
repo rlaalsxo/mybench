@@ -616,7 +616,7 @@ class FoldingFreeEnergyResults(BenchmarkResults):
             )
             ax3.set_xlabel("fraction of native contacts")
             ax3.set_ylabel("free energy (arb. units)")
-            ax3.set_title(f"{s.name} - FNC free energy")
+            ax3.set_title(f"FNC free energy")
             fig3.savefig(sample_dir / "fnc_free_energy.png", dpi=200)
             plt.close(fig3)
 
@@ -1064,7 +1064,7 @@ class MDEmulationSelfResults(BenchmarkResults):
 
             ax.set_xlabel("PCA 1")
             ax.set_ylabel("PCA 2")
-            ax.set_title(f"{s.name} - MD emulation 2D free energy (self)")
+            ax.set_title(f"MD emulation 2D free energy (self)")
 
             fig.savefig(
                 sample_dir / "md_emulation_free_energy.png",
