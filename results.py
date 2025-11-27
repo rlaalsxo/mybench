@@ -397,6 +397,7 @@ class FNCResults(BenchmarkResults):
 # FOLDING FREE ENERGIES (self-reference 버전)
 # ----------------------------------------------------------------------
 
+
 @dataclass
 class SingleSampleFoldingFE:
     """
@@ -415,6 +416,7 @@ class SingleSampleFoldingFE:
     foldedness: np.ndarray
     dg_kcal_per_mol: float
     p_fold_mean: float
+
 
 @dataclass
 class FoldingFreeEnergyResults(BenchmarkResults):
@@ -622,6 +624,7 @@ class FoldingFreeEnergyResults(BenchmarkResults):
 # TICA 기반 2D free energy landscape
 # ----------------------------------------------------------------------
 
+
 @dataclass
 class SingleSampleTICA:
     """
@@ -633,6 +636,7 @@ class SingleSampleTICA:
     """
     name: str
     tica_xy: np.ndarray
+
 
 @dataclass
 class TICAResults(BenchmarkResults):
@@ -828,6 +832,7 @@ class SingleSampleMDEmulationSelf:
     name: str
     proj_xy: np.ndarray
 
+
 @dataclass
 class MDEmulationSelfResults(BenchmarkResults):
     """
@@ -918,10 +923,10 @@ class MDEmulationSelfResults(BenchmarkResults):
         절차:
         1) DistributionMetrics2D(reference_projections = proj_xy) 를 생성
         2) metric.density_ref, metric.low_energy_mask, metric.edges_x/y 사용
-        3) F = -k_B T ln p (옵션에 따라 최소값을 0 으로 shift)
+        3) F = -k_B T ln p 에서 최소값을 0 으로 shift
         4) energy_cutoff 까지 turbo 컬러맵으로, 그 이상은 흰색(set_over)으로 표시
         5) 각 frame 의 (proj1, proj2) 가 어느 bin 에 속하는지 찾아 그 bin 의 F 를
-           per-frame free energy 로 써서 md_emulation_proj2d.csv 에 free_energy 열 추가
+            per-frame free energy 로 써서 md_emulation_proj2d.csv 에 free_energy 열 추가
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -936,9 +941,6 @@ class MDEmulationSelfResults(BenchmarkResults):
         settings = DistributionMetricSettings()
         max_energy = settings.energy_cutoff  # 원본 metric에서 사용하는 cutoff
         levels = 20                          # contour level 수 (원하면 조절 가능)
-
-        # 여기서는 항상 shift 하지 않도록 고정
-        shift_min_to_zero = False
 
         for s in self.samples:
             sample_dir = output_dir / s.name
@@ -974,14 +976,13 @@ class MDEmulationSelfResults(BenchmarkResults):
             kBT = K_BOLTZMANN * self.temperature_K
             F = -kBT * np.log(P + 1e-12)
 
-            # 유효한 grid (P>0) 에서 최소값을 0 으로 shift (옵션)
+            # 유효한 grid (P>0) 에서 최소값을 0 으로 shift
             finite = np.isfinite(F) & (P > 0.0)
             if not np.any(finite):
                 print(f"[WARN] {s.name}: 유효한 density grid 가 없어 plot 생략.")
                 continue
 
-            if shift_min_to_zero:
-                F = F - np.nanmin(F[finite])
+            F = F - np.nanmin(F[finite])
 
             F_fin = F[finite]
             print(
@@ -990,9 +991,6 @@ class MDEmulationSelfResults(BenchmarkResults):
                 f"max(F)={F_fin.max():.3f} kcal/mol, "
                 f"mean(F)={F_fin.mean():.3f} kcal/mol"
             )
-
-            # 시각화용 vmin: 실제 F의 최소값 사용
-            vmin = float(F_fin.min())
 
             # 4) 원본 로직에 맞춰 cutoff 및 mask 적용
             F_for_plot = np.minimum(F, max_energy + 1.0)
@@ -1004,6 +1002,7 @@ class MDEmulationSelfResults(BenchmarkResults):
             # ---------- 여기부터: 각 frame 의 free energy 계산 및 CSV 저장 ----------
 
             # bin index (x: 0..nx-1, y: 0..ny-1) 찾기
+            # np.digitize 는 histogram2d 의 bin 정의와 호환되는 방식이므로 그대로 사용 가능
             ix = np.digitize(xy[:, 0], edges_x) - 1  # shape (n_frames,)
             iy = np.digitize(xy[:, 1], edges_y) - 1
 
@@ -1024,7 +1023,7 @@ class MDEmulationSelfResults(BenchmarkResults):
                 {
                     "proj1": xy[:, 0],
                     "proj2": xy[:, 1],
-                    "free_energy": frame_F,  # 단위: kcal/mol
+                    "free_energy": frame_F,  # 단위: kcal/mol, min(F)=0 로 shift 된 값
                 }
             )
             df_proj.to_csv(sample_dir / "md_emulation_proj2d.csv", index=False)
@@ -1055,17 +1054,17 @@ class MDEmulationSelfResults(BenchmarkResults):
                 F_masked,
                 levels=levels,
                 cmap=cmap,
-                vmin=vmin,
+                vmin=0.0,
                 vmax=max_energy,
             )
-            cf.set_clim(vmin, max_energy)
+            cf.set_clim(0.0, max_energy)
 
             cbar = fig.colorbar(cf, ax=ax, extend="max")
             cbar.set_label("free energy (kcal/mol)")
 
             ax.set_xlabel("PCA 1")
             ax.set_ylabel("PCA 2")
-            ax.set_title("MD emulation 2D free energy (self)")
+            ax.set_title(f"MD emulation 2D free energy (self)")
 
             fig.savefig(
                 sample_dir / "md_emulation_free_energy.png",
@@ -1073,6 +1072,7 @@ class MDEmulationSelfResults(BenchmarkResults):
                 bbox_inches="tight",
             )
             plt.close(fig)
+
 
 # ----------------------------------------------------------------------
 # DSSP SELF (reference 없이 sample 자체 DSSP 통계)
@@ -1096,6 +1096,7 @@ class SingleSampleDSSP:
     helix_frac: np.ndarray
     sheet_frac: np.ndarray
     coil_frac: np.ndarray
+
 
 @dataclass
 class DSSPResults(BenchmarkResults):
