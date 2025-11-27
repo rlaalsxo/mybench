@@ -937,8 +937,7 @@ class MDEmulationSelfResults(BenchmarkResults):
         max_energy = settings.energy_cutoff  # 원본 metric에서 사용하는 cutoff
         levels = 20                          # contour level 수 (원하면 조절 가능)
 
-        # getattr(self, "shift_min_to_zero", True)를 쓰면
-        # dataclass 필드가 없어도 기본적으로 기존 동작(shift) 유지
+        # 여기서는 항상 shift 하지 않도록 고정
         shift_min_to_zero = False
 
         for s in self.samples:
@@ -991,6 +990,9 @@ class MDEmulationSelfResults(BenchmarkResults):
                 f"max(F)={F_fin.max():.3f} kcal/mol, "
                 f"mean(F)={F_fin.mean():.3f} kcal/mol"
             )
+
+            # 시각화용 vmin: 실제 F의 최소값 사용
+            vmin = float(F_fin.min())
 
             # 4) 원본 로직에 맞춰 cutoff 및 mask 적용
             F_for_plot = np.minimum(F, max_energy + 1.0)
@@ -1053,10 +1055,10 @@ class MDEmulationSelfResults(BenchmarkResults):
                 F_masked,
                 levels=levels,
                 cmap=cmap,
-                vmin=0.0 if shift_min_to_zero else 0.0,
+                vmin=vmin,
                 vmax=max_energy,
             )
-            cf.set_clim(0.0, max_energy)
+            cf.set_clim(vmin, max_energy)
 
             cbar = fig.colorbar(cf, ax=ax, extend="max")
             cbar.set_label("free energy (kcal/mol)")
@@ -1170,11 +1172,6 @@ class DSSPResults(BenchmarkResults):
         #     summary_df.to_csv(output_dir / "all_samples_dssp_summary.csv", index=False)
 
     def plot(self, output_dir: Path) -> None:
-        """
-        각 샘플마다:
-        - residue index vs helix/sheet 점유율(프레임 평균)
-        (coil 은 계산만 하고 플롯에는 그리지 않음)
-        """
         output_dir.mkdir(parents=True, exist_ok=True)
 
         helix_codes = np.array(["H", "G", "I"], dtype="<U1")
@@ -1184,7 +1181,7 @@ class DSSPResults(BenchmarkResults):
             sample_dir = output_dir / s.name
             sample_dir.mkdir(parents=True, exist_ok=True)
 
-            dssp_codes = s.dssp_codes  # shape: (n_frames, n_residues)
+            dssp_codes = s.dssp_codes
             if dssp_codes.ndim != 2:
                 continue
 
@@ -1192,19 +1189,16 @@ class DSSPResults(BenchmarkResults):
             if n_residues == 0:
                 continue
 
-            # 잔기별 helix / sheet 점유율 계산 (프레임 평균)
-            helix_mask = np.isin(dssp_codes, helix_codes)   # (T, N)
-            sheet_mask = np.isin(dssp_codes, sheet_codes)   # (T, N)
+            helix_mask = np.isin(dssp_codes, helix_codes)
+            sheet_mask = np.isin(dssp_codes, sheet_codes)
 
-            helix_prob_per_res = helix_mask.mean(axis=0)    # shape: (N,)
-            sheet_prob_per_res = sheet_mask.mean(axis=0)    # shape: (N,)
+            helix_prob_per_res = helix_mask.mean(axis=0)
+            sheet_prob_per_res = sheet_mask.mean(axis=0)
 
             resid_idx = np.arange(n_residues)
 
-            # 가로를 약간 넓게 잡아서 오른쪽에 범례 공간 확보
-            fig, ax = plt.subplots(1, 1, figsize=(4, 3))
-            # 오른쪽 여백 25% 정도 남겨두기
-            fig.subplots_adjust(right=0.75)
+            # 축 자체는 3x3 인치로 유지
+            fig, ax = plt.subplots(figsize=(3, 3))
 
             ax.plot(resid_idx, helix_prob_per_res, linewidth=1, label="helix")
             ax.plot(resid_idx, sheet_prob_per_res, linewidth=1, label="sheet")
@@ -1214,14 +1208,18 @@ class DSSPResults(BenchmarkResults):
             ax.set_ylabel("fraction")
             ax.set_title(s.name)
 
-            # 범례를 플롯 영역 밖(오른쪽)에 배치, 하지만 전체 그림 안에 있음
-            ax.legend(
+            # 범례를 축 밖 오른쪽에 배치
+            legend = ax.legend(
                 loc="center left",
                 bbox_to_anchor=(1.02, 0.5),
                 borderaxespad=0.0,
             )
 
-            fig.savefig(sample_dir / "dssp_per_residue.png", dpi=200)
+            # 범례와 제목까지 포함해서 잘리지 않게 저장
+            fig.savefig(
+                sample_dir / "dssp_per_residue.png",
+                dpi=200,
+                bbox_inches="tight",
+                bbox_extra_artists=(legend,),
+            )
             plt.close(fig)
-
-
