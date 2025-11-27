@@ -939,7 +939,7 @@ class MDEmulationSelfResults(BenchmarkResults):
 
         # getattr(self, "shift_min_to_zero", True)를 쓰면
         # dataclass 필드가 없어도 기본적으로 기존 동작(shift) 유지
-        shift_min_to_zero = getattr(self, "shift_min_to_zero", True)
+        shift_min_to_zero = False
 
         for s in self.samples:
             sample_dir = output_dir / s.name
