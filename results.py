@@ -1201,7 +1201,10 @@ class DSSPResults(BenchmarkResults):
 
             resid_idx = np.arange(n_residues)
 
-            fig, ax = plt.subplots(1, 1, figsize=(3, 3), constrained_layout=True)
+            # 가로를 약간 넓게 잡아서 오른쪽에 범례 공간 확보
+            fig, ax = plt.subplots(1, 1, figsize=(4, 3))
+            # 오른쪽 여백 25% 정도 남겨두기
+            fig.subplots_adjust(right=0.75)
 
             ax.plot(resid_idx, helix_prob_per_res, linewidth=1, label="helix")
             ax.plot(resid_idx, sheet_prob_per_res, linewidth=1, label="sheet")
@@ -1211,14 +1214,14 @@ class DSSPResults(BenchmarkResults):
             ax.set_ylabel("fraction")
             ax.set_title(s.name)
 
-            # 범례를 플롯 밖 오른쪽 위에 배치
+            # 범례를 플롯 영역 밖(오른쪽)에 배치, 하지만 전체 그림 안에 있음
             ax.legend(
-                loc="upper left",
-                bbox_to_anchor=(1.02, 1.0),
+                loc="center left",
+                bbox_to_anchor=(1.02, 0.5),
                 borderaxespad=0.0,
             )
 
-            fig.savefig(sample_dir / "dssp_per_residue.png",
-                        dpi=200, bbox_inches="tight")
+            fig.savefig(sample_dir / "dssp_per_residue.png", dpi=200)
             plt.close(fig)
+
 
