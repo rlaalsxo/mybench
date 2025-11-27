@@ -14,6 +14,7 @@ from bioemu_benchmarks.eval.md_emulation.state_metric import (
     DistributionMetricSettings,
     DistributionMetrics2D,
 )
+from matplotlib.patches import Circle
 
 # BioEmu free_energies.py 와 동일한 볼츠만 상수 (kcal / (mol·K))
 K_BOLTZMANN = 0.001987203599772605  # kcal / (mol·K)
@@ -594,8 +595,6 @@ class FoldingFreeEnergyResults(BenchmarkResults):
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        from bioemu_benchmarks.eval.multiconf.plot import plot_smoothed_1d_free_energy
-
         # basin 정의 하이퍼파라미터
         delta_F_cut = 1.0           # 로컬 최소에서 ΔF <= 이내를 같은 basin 으로
         max_depth_from_global = 3.0 # 글로벌 최소보다 이 값 이상 높으면 무시
@@ -1052,11 +1051,6 @@ class MDEmulationSelfResults(BenchmarkResults):
         output_dir.mkdir(parents=True, exist_ok=True)
 
         import copy
-
-        from bioemu_benchmarks.eval.md_emulation.state_metric import (
-            DistributionMetricSettings,
-            DistributionMetrics2D,
-        )
 
         settings = DistributionMetricSettings()
         max_energy = settings.energy_cutoff

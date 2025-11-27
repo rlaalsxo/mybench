@@ -54,8 +54,8 @@ def run_benchmarks(
 
         aggregate_results[benchmark.value] = results.get_aggregate_metrics()
 
-        results.save_results(results_dir)
-        results.plot(results_dir)
+        results.save_results(output_dir)
+        results.plot(output_dir)
 
         # 옵션: 피클로 저장하고 싶으면 여기서 results 를 피클링해도 됨
 
