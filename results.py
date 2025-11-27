@@ -1195,7 +1195,7 @@ class DSSPResults(BenchmarkResults):
             if n_residues == 0:
                 continue
 
-            # 잔기별 helix / sheet / coil 점유율 계산 (프레임 평균)
+            # 잔기별 helix / sheet 점유율 계산 (프레임 평균)
             helix_mask = np.isin(dssp_codes, helix_codes)   # (T, N)
             sheet_mask = np.isin(dssp_codes, sheet_codes)   # (T, N)
 
@@ -1204,22 +1204,19 @@ class DSSPResults(BenchmarkResults):
 
             resid_idx = np.arange(n_residues)
 
-            # helix / sheet 두 패널만 그림
-            fig, (ax1, ax2) = plt.subplots(
-                2, 1, sharex=True, figsize=(3, 3), constrained_layout=True
-            )
+            # 하나의 축에 helix / sheet 두 곡선을 함께 그림
+            fig, ax = plt.subplots(1, 1, figsize=(3, 3), constrained_layout=True)
 
-            # 위: helix 점유율
-            ax1.plot(resid_idx, helix_prob_per_res, linewidth=1)
-            ax1.set_ylim(0.0, 1.0)
-            ax1.set_ylabel("helix")
-            ax1.set_title(s.name)
+            ax.plot(resid_idx, helix_prob_per_res, linewidth=1, label="helix")
+            ax.plot(resid_idx, sheet_prob_per_res, linewidth=1, label="sheet")
 
-            # 아래: sheet 점유율
-            ax2.plot(resid_idx, sheet_prob_per_res, linewidth=1)
-            ax2.set_ylim(0.0, 1.0)
-            ax2.set_ylabel("sheet")
-            ax2.set_xlabel("residue index")
+            ax.set_ylim(0.0, 1.0)
+            ax.set_xlabel("residue index")
+            ax.set_ylabel("fraction")
+            ax.set_title(s.name)
+
+            # 범례 추가
+            ax.legend()
 
             fig.savefig(sample_dir / "dssp_per_residue.png", dpi=200)
             plt.close(fig)
