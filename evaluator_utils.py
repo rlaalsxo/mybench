@@ -15,7 +15,6 @@ from eval.dssp_self import evaluate_dssp_self
 
 Evaluator = Callable[[Iterable[SampleSpec]], BenchmarkResults]
 
-
 def evaluator_from_benchmark(benchmark: Benchmark, **kwargs) -> Evaluator:
     if benchmark == Benchmark.BASIC_STATS:
         return partial(evaluate_basic_stats, **kwargs)

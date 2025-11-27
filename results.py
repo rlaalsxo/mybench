@@ -1164,67 +1164,6 @@ class MDEmulationSelfResults(BenchmarkResults):
             ax.set_ylabel("PCA 2")
             ax.set_title(f"MD emulation 2D free energy (self)")
 
-            # 5) FNC basin(C1, C2, ...) → PCA 평면에 동그라미
-            basin_csv = sample_dir / "folding_fnc_free_energy_1d_per_frame.csv"
-            if basin_csv.exists():
-                df_fnc = pd.read_csv(basin_csv)
-
-                if (
-                    df_fnc.shape[0] == xy.shape[0]
-                    and "basin_id" in df_fnc.columns
-                ):
-                    basin_id = df_fnc["basin_id"].to_numpy(dtype=int)
-                    colors = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
-
-                    # 존재하는 basin 만 사용
-                    unique_basins = np.unique(basin_id[basin_id >= 0])
-
-                    for b in unique_basins:
-                        mask_b = basin_id == b
-                        # 유효 좌표가 너무 적으면 스킵
-                        if np.count_nonzero(mask_b) < 3:
-                            continue
-
-                        pts = xy[mask_b]          # (nb, 2)
-                        x_center = pts[:, 0].mean()
-                        y_center = pts[:, 1].mean()
-
-                        # 중심에서의 거리 분포 → 반지름 설정 (90 percentile)
-                        dx = pts[:, 0] - x_center
-                        dy = pts[:, 1] - y_center
-                        r = np.sqrt(dx * dx + dy * dy)
-                        if r.size == 0:
-                            continue
-                        radius = np.percentile(r, 90.0)
-                        if radius <= 0.0:
-                            continue
-
-                        color = colors[int(b) % len(colors)]
-                        label = f"C{int(b) + 1}"
-
-                        # 동그라미
-                        circle = Circle(
-                            (x_center, y_center),
-                            radius,
-                            fill=False,
-                            edgecolor=color,
-                            linewidth=1.5,
-                            alpha=0.9,
-                        )
-                        ax.add_patch(circle)
-
-                        # 라벨 텍스트 (원 중심에)
-                        ax.text(
-                            x_center,
-                            y_center,
-                            label,
-                            ha="center",
-                            va="center",
-                            fontsize=7,
-                            color=color,
-                            zorder=6,
-                        )
-
             fig.savefig(
                 sample_dir / "md_emulation_free_energy.png",
                 dpi=300,
