@@ -43,7 +43,7 @@ def run_benchmarks(
             print(f"[INFO] {benchmark.value} already exists, skipping (use --overwrite to redo).")
             continue
 
-        results_dir.mkdir(parents=True, exist_ok=True)
+        # results_dir.mkdir(parents=True, exist_ok=True)
 
         evaluator = evaluator_from_benchmark(
             benchmark,
