@@ -402,151 +402,103 @@ class FNCResults(BenchmarkResults):
 
 def _find_1d_basins(
     F: np.ndarray,
-    finite: np.ndarray,
-    delta_F_cut: float = 1.0,
-    max_depth_from_global: float = 3.0,
+    local_min_bins: List[int],
 ) -> Tuple[List[np.ndarray], np.ndarray]:
     """
-    1D free energy F (min(F)=0 으로 shift 된 상태)에 대해
-    로컬 최소 주변의 연속된 구간을 basin 으로 정의.
+    정상적인 basin 정의:
+    - 주어진 local minima 를 기준으로
+    - 좌·우 방향으로 free energy 가 증가하는 방향의
+      첫 번째 ridge(saddle) 전까지 확장한 구간을 basin 으로 정의.
 
-    반환
-    ----
-    basins       : 각 basin 이 포함하는 bin index 배열 리스트
-    basin_bin_id : len(F) 배열, 각 bin 의 basin 번호 (없으면 -1)
-                   basin_id 0 → C1, 1 → C2, ... 로 라벨링에 사용
+    delta_F_cut 같은 인위적 threshold 사용하지 않음.
     """
+
     F = np.asarray(F)
-    n = F.size
-    basins: List[np.ndarray] = []
+    n = len(F)
+
+    basins = []
     basin_bin_id = np.full(n, -1, dtype=int)
 
-    if n < 3:
-        return basins, basin_bin_id
-    if not np.any(finite):
+    if len(local_min_bins) == 0:
         return basins, basin_bin_id
 
-    F_finite = F[finite]
-    Fmin = np.nanmin(F_finite)
+    basin_id = 0
 
-    # 로컬 최소 후보
-    cand: List[int] = []
-    for i in range(1, n - 1):
-        if not (finite[i - 1] and finite[i] and finite[i + 1]):
-            continue
-        if ((F[i] < F[i - 1] and F[i] <= F[i + 1]) or
-            (F[i] <= F[i - 1] and F[i] < F[i + 1])):
-            # 너무 얕은 minima 는 제외 (글로벌 최소보다 너무 높으면)
-            if F[i] <= Fmin + max_depth_from_global:
-                cand.append(i)
+    for m in local_min_bins:
 
-    if not cand:
-        return basins, basin_bin_id
-
-    cand = np.array(cand, dtype=int)
-    # 더 깊은(min F) minima 부터 basin 생성
-    order = np.argsort(F[cand])
-
-    next_basin_id = 0
-    for j in order:
-        i_min = cand[j]
-        if basin_bin_id[i_min] >= 0:
-            # 이미 다른 basin 에 포함
-            continue
-
-        thr = F[i_min] + delta_F_cut
-
-        # 좌측 확장
-        left = i_min
-        while (left - 1 >= 0 and
-               finite[left - 1] and
-               F[left - 1] <= thr and
-               basin_bin_id[left - 1] < 0):
+        # left 확장
+        left = m
+        while left - 1 >= 0:
+            if not np.isfinite(F[left - 1]):
+                break
+            if F[left - 1] > F[left]:
+                break   # saddle 방향 도달
             left -= 1
 
-        # 우측 확장
-        right = i_min
-        while (right + 1 < n and
-               finite[right + 1] and
-               F[right + 1] <= thr and
-               basin_bin_id[right + 1] < 0):
+        # right 확장
+        right = m
+        while right + 1 < n:
+            if not np.isfinite(F[right + 1]):
+                break
+            if F[right + 1] > F[right]:
+                break
             right += 1
 
         idxs = np.arange(left, right + 1)
         basins.append(idxs)
-        basin_bin_id[idxs] = next_basin_id
-        next_basin_id += 1
+        basin_bin_id[idxs] = basin_id
+        basin_id += 1
 
     return basins, basin_bin_id
 
 def _find_local_and_global_minima_1d(
     F: np.ndarray,
     P: np.ndarray,
-    max_depth_from_global: float = 3.0,
     min_prominence: float = 0.5,
-    min_prob: float = 1e-6,
 ) -> Tuple[List[int], int]:
     """
-    1D free energy F 와 histogram density P 에서
-    '확실한' local / global minimum bin index 를 찾는다.
+    정상적인 1D local/global minimum 탐지.
 
-    - global minimum:
-        P > min_prob 이고 F 가 최소인 bin
-
-    - local minimum:
-        * P > min_prob 인 bin 들 중에서
-        * 바로 이전/다음 유효 bin 보다 모두 낮고
-        * 양 이웃과의 free energy 차이가 min_prominence 이상이며
-        * 글로벌 최소보다 max_depth_from_global 이상 높지 않은 경우
+    - global minimum: F가 전체에서 최소인 bin
+    - local minima:
+        * F[i] < F[i-1] AND F[i] < F[i+1]
+        * prominence ≥ min_prominence
     """
+
     F = np.asarray(F)
     P = np.asarray(P)
 
-    # 유효한 bin: 확률밀도가 충분하고 F 가 finite 인 경우
-    valid = np.isfinite(F) & (P > min_prob)
-    idx = np.where(valid)[0]
-    if idx.size == 0:
+    n = len(F)
+    if n < 3:
         return [], -1
 
-    F_valid = F[idx]
-    Fmin = float(F_valid.min())
+    # global minimum
+    global_min_bin = int(np.argmin(F))
 
-    # global minimum (유효 bin 중에서 F 가 최소인 곳)
-    global_min_rel = int(np.argmin(F_valid))
-    global_min_bin = int(idx[global_min_rel])
+    local_min = []
 
-    local_min_bins: List[int] = []
-
-    # 유효 bin 순서 기준으로 양옆을 보는 1D local minimum
-    for k in range(1, idx.size - 1):
-        i_prev = idx[k - 1]
-        i = idx[k]
-        i_next = idx[k + 1]
-
-        Fi, F_prev, F_next = F[i], F[i_prev], F[i_next]
-
-        # 수학적인 local min 조건 (이웃 둘보다 모두 낮음)
-        if not (Fi < F_prev and Fi < F_next):
+    # 1D strict minima 탐지
+    for i in range(1, n - 1):
+        if not (np.isfinite(F[i]) and np.isfinite(F[i - 1]) and np.isfinite(F[i + 1])):
             continue
 
-        # 글로벌 최소에서 너무 위면 배제
-        if Fi > Fmin + max_depth_from_global:
-            continue
+        if F[i] < F[i - 1] and F[i] < F[i + 1]:
 
-        # 골 깊이 (prominence): 양쪽 이웃과의 차이가 모두 충분히 커야 함
-        if (F_prev - Fi < min_prominence) or (F_next - Fi < min_prominence):
-            continue
+            # prominence 계산
+            left_peak = max(F[i - 1], F[i])
+            right_peak = max(F[i + 1], F[i])
+            prominence = min(left_peak - F[i], right_peak - F[i])
 
-        local_min_bins.append(i)
+            if prominence >= min_prominence:
+                local_min.append(i)
 
-    # global minimum 이 local 리스트에 없으면 추가
-    if global_min_bin not in local_min_bins:
-        local_min_bins.append(global_min_bin)
+    # global minimum 포함 (중복 제거)
+    if global_min_bin not in local_min:
+        local_min.append(global_min_bin)
 
-    # 정렬 + 중복 제거
-    local_min_bins = sorted(set(local_min_bins))
+    local_min = sorted(local_min)
 
-    return local_min_bins, global_min_bin
+    return local_min, global_min_bin
 
 # ----------------------------------------------------------------------
 # FOLDING FREE ENERGIES (self-reference 버전)
