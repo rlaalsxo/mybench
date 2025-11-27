@@ -483,49 +483,67 @@ def _find_local_and_global_minima_1d(
     F: np.ndarray,
     finite: np.ndarray,
     max_depth_from_global: float = 3.0,
+    min_prominence: float = 0.5,
+    window: int = 3,
 ) -> Tuple[List[int], int]:
     """
-    1D free energy F 에서 '진짜' local minimum 과 global minimum bin index 를 찾는다.
+    1D free energy F 에서 '확실한' local / global minimum bin index 를 찾는다.
 
-    - local minimum: 양 옆 bin 보다 모두 낮은 점 (F[i] < F[i-1], F[i] < F[i+1])
-    - 너무 높은 골(글로벌 최소보다 max_depth_from_global 이상 높은 것)은 제외
-    - global minimum: finite 영역에서 F 가 가장 낮은 점
-
-    반환
-    ----
-    local_min_bins : local minimum 으로 취급할 bin 인덱스 리스트
-    global_min_bin : global minimum bin 인덱스 (없으면 -1)
+    - global minimum:
+        finite 영역에서 F 가 가장 낮은 bin
+    - local minimum:
+        * 중심 bin 이 [i-window, i+window] 구간에서 최소이고
+        * 양쪽(barrier)에서 최소 min_prominence 만큼 더 올라가 있으며
+        * 글로벌 최소보다 max_depth_from_global 이상 높지 않은 경우에만 인정
     """
     F = np.asarray(F)
+    n = F.size
+
     idx_finite = np.where(finite)[0]
-    if idx_finite.size == 0:
+    if idx_finite.size == 0 or n < 2 * window + 1:
         return [], -1
 
     F_finite = F[idx_finite]
     Fmin = float(np.nanmin(F_finite))
 
-    local_min_bins: List[int] = []
-
-    # 양 끝은 local minimum 후보에서 제외 (i=1..n-2)
-    for i in idx_finite[1:-1]:
-        if not (finite[i - 1] and finite[i] and finite[i + 1]):
-            continue
-
-        # 수학적인 local minimum 조건
-        if F[i] < F[i - 1] and F[i] < F[i + 1]:
-            # 너무 높이 떠 있는 골은 버림
-            if F[i] <= Fmin + max_depth_from_global:
-                local_min_bins.append(i)
-
-    # finite 영역 전체에서 global minimum
+    # global minimum (finite 영역 전체에서)
     global_min_rel = int(np.argmin(F_finite))
     global_min_bin = int(idx_finite[global_min_rel])
 
-    # local 리스트에 global 이 없으면 추가
+    local_min_bins: List[int] = []
+
+    for i in idx_finite:
+        if i - window < 0 or i + window >= n:
+            continue
+        # 윈도우 안에 NaN / 비유효 bin 이 있으면 스킵
+        if not np.all(finite[i - window : i + window + 1]):
+            continue
+
+        # 윈도우 내에서의 최소값이어야 함
+        win = slice(i - window, i + window + 1)
+        if F[i] != np.min(F[win]):
+            continue
+
+        # 너무 높은 골은 제외 (글로벌 최소에서 너무 위)
+        if F[i] > Fmin + max_depth_from_global:
+            continue
+
+        # 양쪽 barrier 높이 계산
+        left_max = float(np.max(F[i - window : i]))      # 왼쪽 최고점
+        right_max = float(np.max(F[i + 1 : i + window + 1]))  # 오른쪽 최고점
+        barrier_height = min(left_max - F[i], right_max - F[i])
+
+        # 골 깊이가 충분히 크지 않으면 local minimum 으로 취급하지 않음
+        if barrier_height < min_prominence:
+            continue
+
+        local_min_bins.append(i)
+
+    # global minimum 을 local 리스트에 포함시키지 않았다면 추가
     if global_min_bin not in local_min_bins:
         local_min_bins.append(global_min_bin)
 
-    # 정렬 및 중복 제거
+    # 정렬 + 중복 제거
     local_min_bins = sorted(set(local_min_bins))
 
     return local_min_bins, global_min_bin
