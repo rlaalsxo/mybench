@@ -657,17 +657,14 @@ class FoldingFreeEnergyResults(BenchmarkResults):
             # 1-1) basin 탐지 (bin 기준) – 프레임별 basin_id 계산용
             basins, basin_bin_id = _find_1d_basins(
                 F,
-                finite=finite,
-                delta_F_cut=delta_F_cut,
-                max_depth_from_global=max_depth_from_global,
+                local_min_bins=local_min_bins,
             )
 
             # 1-2) 곡선 자체에서 global / local minimum bin 찾기
             local_min_bins, global_min_bin = _find_local_and_global_minima_1d(
                 F,
                 P,
-                max_depth_from_global=max_depth_from_global,
-                # 필요하면 여기서 min_prominence, min_prob 를 튜닝 가능
+                min_prominence=0.5,
             )
 
             # grid 정보 CSV
