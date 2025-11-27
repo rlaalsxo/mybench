@@ -479,6 +479,57 @@ def _find_1d_basins(
 
     return basins, basin_bin_id
 
+def _find_local_and_global_minima_1d(
+    F: np.ndarray,
+    finite: np.ndarray,
+    max_depth_from_global: float = 3.0,
+) -> Tuple[List[int], int]:
+    """
+    1D free energy F 에서 '진짜' local minimum 과 global minimum bin index 를 찾는다.
+
+    - local minimum: 양 옆 bin 보다 모두 낮은 점 (F[i] < F[i-1], F[i] < F[i+1])
+    - 너무 높은 골(글로벌 최소보다 max_depth_from_global 이상 높은 것)은 제외
+    - global minimum: finite 영역에서 F 가 가장 낮은 점
+
+    반환
+    ----
+    local_min_bins : local minimum 으로 취급할 bin 인덱스 리스트
+    global_min_bin : global minimum bin 인덱스 (없으면 -1)
+    """
+    F = np.asarray(F)
+    idx_finite = np.where(finite)[0]
+    if idx_finite.size == 0:
+        return [], -1
+
+    F_finite = F[idx_finite]
+    Fmin = float(np.nanmin(F_finite))
+
+    local_min_bins: List[int] = []
+
+    # 양 끝은 local minimum 후보에서 제외 (i=1..n-2)
+    for i in idx_finite[1:-1]:
+        if not (finite[i - 1] and finite[i] and finite[i + 1]):
+            continue
+
+        # 수학적인 local minimum 조건
+        if F[i] < F[i - 1] and F[i] < F[i + 1]:
+            # 너무 높이 떠 있는 골은 버림
+            if F[i] <= Fmin + max_depth_from_global:
+                local_min_bins.append(i)
+
+    # finite 영역 전체에서 global minimum
+    global_min_rel = int(np.argmin(F_finite))
+    global_min_bin = int(idx_finite[global_min_rel])
+
+    # local 리스트에 global 이 없으면 추가
+    if global_min_bin not in local_min_bins:
+        local_min_bins.append(global_min_bin)
+
+    # 정렬 및 중복 제거
+    local_min_bins = sorted(set(local_min_bins))
+
+    return local_min_bins, global_min_bin
+
 # ----------------------------------------------------------------------
 # FOLDING FREE ENERGIES (self-reference 버전)
 # ----------------------------------------------------------------------
@@ -589,9 +640,9 @@ class FoldingFreeEnergyResults(BenchmarkResults):
         """
         각 샘플마다:
         - FNC 기반 1D free energy (–log p(FNC), 0~1 구간, 임의 단위)
-        - basin(움푹 파인 구간) 탐지
-        - 각 프레임별 basin_id 저장
-        - 플롯 상에 basin 을 C1, C2 ... 로 동그라미 표시
+        - basin(움푹 파인 구간) 탐지 및 프레임별 basin_id 저장
+        - free-energy 곡선 위의 global / local minimum 을
+        점선 + 'g_m' / 'l_m' 으로 표시
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -633,7 +684,7 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                 f"mean(F_grid)={F_fin.mean():.3f}"
             )
 
-            # 1-1) basin 탐지 (bin 기준)
+            # 1-1) basin 탐지 (bin 기준) – 프레임별 basin_id 계산용
             basins, basin_bin_id = _find_1d_basins(
                 F,
                 finite=finite,
@@ -641,7 +692,14 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                 max_depth_from_global=max_depth_from_global,
             )
 
-            # grid 정보 CSV (선택사항, 있으면 디버깅에 유용)
+            # 1-2) 곡선 자체에서 global / local minimum bin 찾기
+            local_min_bins, global_min_bin = _find_local_and_global_minima_1d(
+                F,
+                finite=finite,
+                max_depth_from_global=max_depth_from_global,
+            )
+
+            # grid 정보 CSV
             df_grid = pd.DataFrame(
                 {
                     "fnc_center": centers,
@@ -695,60 +753,70 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                 index=False,
             )
 
-            # 3) 1D free energy 플롯 + C1/C2 동그라미
+            # 3) 1D free energy 플롯 + g_m / l_m 점선 표기
             fig3, ax3 = plt.subplots(figsize=(8, 4))
 
-            # 기존 BioEmu 스타일 free energy 곡선
+            # 기존 BioEmu 스타일 free energy 곡선 + 회색 영역
             plot_smoothed_1d_free_energy(
                 s.fnc,
                 range=(0.0, 1.0),
                 ax=ax3,
             )
 
-            # y축 범위 기준으로 동그라미 위치(세로)는 아래쪽 일정 높이로 통일
             ymin, ymax = ax3.get_ylim()
-            y_circle = ymin + 0.15 * (ymax - ymin)
+            height = ymax - ymin
+            label_y = ymin + 0.05 * height  # 텍스트가 놓일 y 위치 (아래쪽 고정)
 
-            colors = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
-
-            for basin_idx, bins in enumerate(basins):
-                if bins.size == 0:
-                    continue
-
-                # basin 내에서 free energy 가 최소인 bin → "움푹 파인 중심"
-                local_min_bin = bins[np.argmin(F[bins])]
-                x_center = centers[local_min_bin]
-
-                color = colors[basin_idx % len(colors)]
-                label = f"C{basin_idx + 1}"
-
-                # 동그라미 마커
-                ax3.scatter(
-                    x_center,
-                    y_circle,
-                    s=80,
-                    facecolors="none",
-                    edgecolors=color,
-                    linewidths=1.5,
-                    zorder=5,
+            # global minimum
+            if global_min_bin >= 0:
+                x_g = centers[global_min_bin]
+                y_g = F[global_min_bin]
+                ax3.plot(
+                    [x_g, x_g],
+                    [label_y, y_g],
+                    linestyle=":",
+                    linewidth=0.8,
+                    color="k",
                 )
-                # 라벨 텍스트
                 ax3.text(
-                    x_center,
-                    y_circle,
-                    label,
+                    x_g,
+                    label_y,
+                    "g_m",
                     ha="center",
-                    va="center",
+                    va="top",
                     fontsize=8,
-                    color=color,
-                    zorder=6,
+                    color="k",
+                )
+
+            # local minima (global 제외)
+            for b in local_min_bins:
+                if b == global_min_bin:
+                    continue
+                x_l = centers[b]
+                y_l = F[b]
+                ax3.plot(
+                    [x_l, x_l],
+                    [label_y, y_l],
+                    linestyle=":",
+                    linewidth=0.8,
+                    color="k",
+                )
+                ax3.text(
+                    x_l,
+                    label_y,
+                    "l_m",
+                    ha="center",
+                    va="top",
+                    fontsize=8,
+                    color="k",
                 )
 
             ax3.set_xlabel("fraction of native contacts")
             ax3.set_ylabel("free energy (arb. units)")
-            ax3.set_title(f"FNC free energy (C1, C2 ... basins)")
+            ax3.set_title("results - FNC free energy")
             fig3.savefig(sample_dir / "fnc_free_energy.png", dpi=200)
             plt.close(fig3)
+
 
 # ----------------------------------------------------------------------
 # TICA 기반 2D free energy landscape
