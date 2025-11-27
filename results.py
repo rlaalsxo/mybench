@@ -481,65 +481,65 @@ def _find_1d_basins(
 
 def _find_local_and_global_minima_1d(
     F: np.ndarray,
-    finite: np.ndarray,
+    P: np.ndarray,
     max_depth_from_global: float = 3.0,
     min_prominence: float = 0.5,
-    window: int = 3,
+    min_prob: float = 1e-6,
 ) -> Tuple[List[int], int]:
     """
-    1D free energy F 에서 '확실한' local / global minimum bin index 를 찾는다.
+    1D free energy F 와 histogram density P 에서
+    '확실한' local / global minimum bin index 를 찾는다.
 
     - global minimum:
-        finite 영역에서 F 가 가장 낮은 bin
+        P > min_prob 이고 F 가 최소인 bin
+
     - local minimum:
-        * 중심 bin 이 [i-window, i+window] 구간에서 최소이고
-        * 양쪽(barrier)에서 최소 min_prominence 만큼 더 올라가 있으며
-        * 글로벌 최소보다 max_depth_from_global 이상 높지 않은 경우에만 인정
+        * P > min_prob 인 bin 들 중에서
+        * 바로 이전/다음 유효 bin 보다 모두 낮고
+        * 양 이웃과의 free energy 차이가 min_prominence 이상이며
+        * 글로벌 최소보다 max_depth_from_global 이상 높지 않은 경우
     """
     F = np.asarray(F)
-    n = F.size
+    P = np.asarray(P)
 
-    idx_finite = np.where(finite)[0]
-    if idx_finite.size == 0 or n < 2 * window + 1:
+    # 유효한 bin: 확률밀도가 충분하고 F 가 finite 인 경우
+    valid = np.isfinite(F) & (P > min_prob)
+    idx = np.where(valid)[0]
+    if idx.size == 0:
         return [], -1
 
-    F_finite = F[idx_finite]
-    Fmin = float(np.nanmin(F_finite))
+    F_valid = F[idx]
+    Fmin = float(F_valid.min())
 
-    # global minimum (finite 영역 전체에서)
-    global_min_rel = int(np.argmin(F_finite))
-    global_min_bin = int(idx_finite[global_min_rel])
+    # global minimum (유효 bin 중에서 F 가 최소인 곳)
+    global_min_rel = int(np.argmin(F_valid))
+    global_min_bin = int(idx[global_min_rel])
 
     local_min_bins: List[int] = []
 
-    for i in idx_finite:
-        if i - window < 0 or i + window >= n:
-            continue
-        # 윈도우 안에 NaN / 비유효 bin 이 있으면 스킵
-        if not np.all(finite[i - window : i + window + 1]):
-            continue
+    # 유효 bin 순서 기준으로 양옆을 보는 1D local minimum
+    for k in range(1, idx.size - 1):
+        i_prev = idx[k - 1]
+        i = idx[k]
+        i_next = idx[k + 1]
 
-        # 윈도우 내에서의 최소값이어야 함
-        win = slice(i - window, i + window + 1)
-        if F[i] != np.min(F[win]):
-            continue
+        Fi, F_prev, F_next = F[i], F[i_prev], F[i_next]
 
-        # 너무 높은 골은 제외 (글로벌 최소에서 너무 위)
-        if F[i] > Fmin + max_depth_from_global:
+        # 수학적인 local min 조건 (이웃 둘보다 모두 낮음)
+        if not (Fi < F_prev and Fi < F_next):
             continue
 
-        # 양쪽 barrier 높이 계산
-        left_max = float(np.max(F[i - window : i]))      # 왼쪽 최고점
-        right_max = float(np.max(F[i + 1 : i + window + 1]))  # 오른쪽 최고점
-        barrier_height = min(left_max - F[i], right_max - F[i])
+        # 글로벌 최소에서 너무 위면 배제
+        if Fi > Fmin + max_depth_from_global:
+            continue
 
-        # 골 깊이가 충분히 크지 않으면 local minimum 으로 취급하지 않음
-        if barrier_height < min_prominence:
+        # 골 깊이 (prominence): 양쪽 이웃과의 차이가 모두 충분히 커야 함
+        if (F_prev - Fi < min_prominence) or (F_next - Fi < min_prominence):
             continue
 
         local_min_bins.append(i)
 
-    # global minimum 을 local 리스트에 포함시키지 않았다면 추가
+    # global minimum 이 local 리스트에 없으면 추가
     if global_min_bin not in local_min_bins:
         local_min_bins.append(global_min_bin)
 
@@ -713,8 +713,9 @@ class FoldingFreeEnergyResults(BenchmarkResults):
             # 1-2) 곡선 자체에서 global / local minimum bin 찾기
             local_min_bins, global_min_bin = _find_local_and_global_minima_1d(
                 F,
-                finite=finite,
+                P,
                 max_depth_from_global=max_depth_from_global,
+                # 필요하면 여기서 min_prominence, min_prob 를 튜닝 가능
             )
 
             # grid 정보 CSV
@@ -834,7 +835,6 @@ class FoldingFreeEnergyResults(BenchmarkResults):
             ax3.set_title("results - FNC free energy")
             fig3.savefig(sample_dir / "fnc_free_energy.png", dpi=200)
             plt.close(fig3)
-
 
 # ----------------------------------------------------------------------
 # TICA 기반 2D free energy landscape
