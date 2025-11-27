@@ -8,6 +8,12 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import copy
+from bioemu_benchmarks.eval.multiconf.plot import plot_smoothed_1d_free_energy
+from bioemu_benchmarks.eval.md_emulation.state_metric import (
+    DistributionMetricSettings,
+    DistributionMetrics2D,
+)
 
 # BioEmu free_energies.py 와 동일한 볼츠만 상수 (kcal / (mol·K))
 K_BOLTZMANN = 0.001987203599772605  # kcal / (mol·K)
@@ -397,6 +403,84 @@ class FNCResults(BenchmarkResults):
 # FOLDING FREE ENERGIES (self-reference 버전)
 # ----------------------------------------------------------------------
 
+def _find_1d_basins(
+    F: np.ndarray,
+    finite: np.ndarray,
+    delta_F_cut: float = 1.0,
+    max_depth_from_global: float = 3.0,
+) -> Tuple[List[np.ndarray], np.ndarray]:
+    """
+    1D free energy F (이미 min(F)=0 으로 shift 된 배열)에 대해
+    로컬 최소 주변의 연속된 구간을 basin 으로 정의한다.
+
+    반환
+    ----
+    basins       : 각 basin 이 포함하는 bin index 배열의 리스트
+                   예: [array([3,4,5]), array([10,11]), ...]
+    basin_bin_id : 길이 len(F) 인 배열, 각 bin 이 어느 basin 에 속하는지
+                   (-1 이면 어떤 basin 에도 속하지 않음)
+    """
+    F = np.asarray(F)
+    n = F.size
+    basins: List[np.ndarray] = []
+    basin_bin_id = np.full(n, -1, dtype=int)
+
+    if n < 3:
+        return basins, basin_bin_id
+    if not np.any(finite):
+        return basins, basin_bin_id
+
+    F_finite = F[finite]
+    Fmin = np.nanmin(F_finite)
+
+    # 로컬 최소 후보 찾기
+    cand: List[int] = []
+    for i in range(1, n - 1):
+        if not (finite[i - 1] and finite[i] and finite[i + 1]):
+            continue
+        if ((F[i] < F[i - 1] and F[i] <= F[i + 1]) or
+            (F[i] <= F[i - 1] and F[i] < F[i + 1])):
+            # 글로벌 최소보다 너무 높은 minima 는 제외
+            if F[i] <= Fmin + max_depth_from_global:
+                cand.append(i)
+
+    if not cand:
+        return basins, basin_bin_id
+
+    cand = np.array(cand, dtype=int)
+    # 더 깊은(작은 F) minima 부터 basin 확장
+    order = np.argsort(F[cand])
+
+    next_basin_id = 0
+    for j in order:
+        i_min = cand[j]
+        if basin_bin_id[i_min] >= 0:
+            # 이미 다른 basin 에 흡수된 minima
+            continue
+
+        # 해당 최소점에서 좌우로 ΔF 이내인 bin 을 확장
+        left = i_min
+        thr = F[i_min] + delta_F_cut
+
+        while (left - 1 >= 0 and
+               finite[left - 1] and
+               F[left - 1] <= thr and
+               basin_bin_id[left - 1] < 0):
+            left -= 1
+
+        right = i_min
+        while (right + 1 < n and
+               finite[right + 1] and
+               F[right + 1] <= thr and
+               basin_bin_id[right + 1] < 0):
+            right += 1
+
+        idxs = np.arange(left, right + 1)
+        basins.append(idxs)
+        basin_bin_id[idxs] = next_basin_id
+        next_basin_id += 1
+
+    return basins, basin_bin_id
 
 @dataclass
 class SingleSampleFoldingFE:
@@ -503,41 +587,26 @@ class FoldingFreeEnergyResults(BenchmarkResults):
     def plot(self, output_dir: Path) -> None:
         """
         각 샘플마다:
-        - FNC vs Frame
-        - foldedness vs Frame
         - FNC 기반 1D free energy (–log p(FNC), 0~1 구간, 임의 단위)
+        - basin(웅덩이) 구간 탐지
+        - 각 프레임별 FNC free energy 및 basin_id 저장
 
-        추가로:
-        - FNC 1D free energy 그리드 및 확률 CSV
-        - 각 프레임별 FNC free energy CSV
+        생성 파일:
+        - fnc_free_energy.png                    : 부드럽게 그린 1D free energy + basin 영역
+        - folding_fnc_free_energy_1d_grid.csv    : bin 단위 free energy + basin_id
+        - folding_fnc_free_energy_1d_per_frame.csv : frame 단위 FNC, free energy, basin_id
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        from bioemu_benchmarks.eval.multiconf.plot import plot_smoothed_1d_free_energy
+        # basin 정의에 사용할 하이퍼파라미터 (필요하면 클래스 변수화 가능)
+        delta_F_cut = 1.0          # 각 로컬 최소에서 이 값 이내인 영역을 같은 basin 으로
+        max_depth_from_global = 3.0  # 글로벌 최소보다 이 값 이상 높은 minima 는 무시
 
         for s in self.samples:
             sample_dir = output_dir / s.name
             sample_dir.mkdir(parents=True, exist_ok=True)
 
-            # 1) FNC vs Frame
-            # fig, ax = plt.subplots(figsize=(8, 4))
-            # ax.plot(s.frame_idx, s.fnc)
-            # ax.set_xlabel("Frame")
-            # ax.set_ylabel("fraction of native contacts")
-            # ax.set_title(f"{s.name} - FNC vs Frame")
-            # fig.savefig(sample_dir / "fnc_vs_frame.png", dpi=200)
-            # plt.close(fig)
-
-            # # 2) foldedness vs Frame
-            # fig2, ax2 = plt.subplots(figsize=(8, 4))
-            # ax2.plot(s.frame_idx, s.foldedness)
-            # ax2.set_xlabel("Frame")
-            # ax2.set_ylabel("foldedness (p_fold)")
-            # ax2.set_title(f"{s.name} - foldedness vs Frame")
-            # fig2.savefig(sample_dir / "foldedness_vs_frame.png", dpi=200)
-            # plt.close(fig2)
-
-            # 3) 우리가 직접 계산하는 FNC 1D free energy (–log p, arbitrary units)
+            # 1) FNC 분포 → 1D free energy grid
             hist, edges = np.histogram(
                 s.fnc,
                 bins=50,
@@ -549,74 +618,112 @@ class FoldingFreeEnergyResults(BenchmarkResults):
             F = -np.log(P + 1e-12)
 
             finite = np.isfinite(F)
-            if np.any(finite):
-                F = F - np.min(F[finite])
-
-                F_fin = F[finite]
+            if not np.any(finite):
                 print(
-                    f"[DEBUG] FOLDING_FNC_FE_1D_GRID {s.name}: "
-                    f"min(F_grid)={F_fin.min():.3f}, "
-                    f"max(F_grid)={F_fin.max():.3f}, "
-                    f"mean(F_grid)={F_fin.mean():.3f}"
+                    f"[WARN] FOLDING_FNC_FE_1D_GRID {s.name}: "
+                    f"유효한 free-energy grid 가 없어 plot 생략."
+                )
+                continue
+
+            # min(F)=0 으로 shift
+            F = F - np.min(F[finite])
+
+            F_fin = F[finite]
+            print(
+                f"[DEBUG] FOLDING_FNC_FE_1D_GRID {s.name}: "
+                f"min(F_grid)={F_fin.min():.3f}, "
+                f"max(F_grid)={F_fin.max():.3f}, "
+                f"mean(F_grid)={F_fin.mean():.3f}"
+            )
+
+            # 1-1) basin 탐지 (bin 기준)
+            basins, basin_bin_id = _find_1d_basins(
+                F,
+                finite=finite,
+                delta_F_cut=delta_F_cut,
+                max_depth_from_global=max_depth_from_global,
+            )
+
+            # grid 정보 CSV 저장 (bin 기준)
+            df_grid = pd.DataFrame(
+                {
+                    "fnc_center": centers,
+                    "prob_density": P,
+                    "free_energy_arb": F,
+                    "basin_id": basin_bin_id.astype(int),
+                }
+            )
+            df_grid.to_csv(
+                sample_dir / "folding_fnc_free_energy_1d_grid.csv",
+                index=False,
+            )
+
+            # 2) 프레임별 free energy 및 basin_id 계산
+            idx = np.searchsorted(edges, s.fnc, side="right") - 1
+            valid = (idx >= 0) & (idx < F.shape[0])
+
+            fe_per_frame = np.full(s.fnc.shape, np.nan, dtype=float)
+            fe_per_frame[valid] = F[idx[valid]]
+
+            basin_id_per_frame = np.full(s.fnc.shape, -1, dtype=int)
+            valid_basin = valid & (basin_bin_id[idx] >= 0)
+            basin_id_per_frame[valid_basin] = basin_bin_id[idx[valid_basin]]
+
+            fe_valid = fe_per_frame[np.isfinite(fe_per_frame)]
+            if fe_valid.size > 0:
+                print(
+                    f"[DEBUG] FOLDING_FNC_FE_1D_FRAMES {s.name}: "
+                    f"min(F_frame)={fe_valid.min():.3f}, "
+                    f"max(F_frame)={fe_valid.max():.3f}, "
+                    f"mean(F_frame)={fe_valid.mean():.3f}, "
+                    f"n_valid={fe_valid.size}/{fe_per_frame.size}"
+                )
+            else:
+                print(
+                    f"[DEBUG] FOLDING_FNC_FE_1D_FRAMES {s.name}: "
+                    f"no valid frame free energies (all NaN)."
                 )
 
-                df_grid = pd.DataFrame(
-                    {
-                        "fnc_center": centers,
-                        "prob_density": P,
-                        "free_energy_arb": F,
-                    }
-                )
-                # df_grid.to_csv(
-                #     sample_dir / "folding_fnc_free_energy_1d_grid.csv",
-                #     index=False,
-                # )
+            df_frames = pd.DataFrame(
+                {
+                    "frame": s.frame_idx,
+                    "fnc": s.fnc,
+                    "foldedness": s.foldedness,
+                    "free_energy_arb": fe_per_frame,
+                    "basin_id": basin_id_per_frame,
+                }
+            )
+            df_frames.to_csv(
+                sample_dir / "folding_fnc_free_energy_1d_per_frame.csv",
+                index=False,
+            )
 
-                # 프레임별 free energy
-                idx = np.searchsorted(edges, s.fnc, side="right") - 1
-                valid = (idx >= 0) & (idx < F.shape[0])
-
-                fe_per_frame = np.full(s.fnc.shape, np.nan, dtype=float)
-                fe_per_frame[valid] = F[idx[valid]]
-
-                fe_valid = fe_per_frame[np.isfinite(fe_per_frame)]
-                if fe_valid.size > 0:
-                    print(
-                        f"[DEBUG] FOLDING_FNC_FE_1D_FRAMES {s.name}: "
-                        f"min(F_frame)={fe_valid.min():.3f}, "
-                        f"max(F_frame)={fe_valid.max():.3f}, "
-                        f"mean(F_frame)={fe_valid.mean():.3f}, "
-                        f"n_valid={fe_valid.size}/{fe_per_frame.size}"
-                    )
-                else:
-                    print(
-                        f"[DEBUG] FOLDING_FNC_FE_1D_FRAMES {s.name}: "
-                        f"no valid frame free energies (all NaN)."
-                    )
-
-                df_frames = pd.DataFrame(
-                    {
-                        "frame": s.frame_idx,
-                        "fnc": s.fnc,
-                        "foldedness": s.foldedness,
-                        "free_energy_arb": fe_per_frame,
-                    }
-                )
-                # df_frames.to_csv(
-                #     sample_dir / "folding_fnc_free_energy_1d_per_frame.csv",
-                #     index=False,
-                # )
-
-            # 4) 기존 BioEmu 스타일 1D free energy 플롯 (이미지용)
+            # 3) 1D free energy 플롯 + basin 영역 표시
             fig3, ax3 = plt.subplots(figsize=(8, 4))
+            # 기존 BioEmu 스타일 free energy 곡선
             plot_smoothed_1d_free_energy(
                 s.fnc,
                 range=(0.0, 1.0),
                 ax=ax3,
             )
+
+            # basin 구간을 FNC 축 상에서 반투명 영역으로 표시
+            colors = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
+            for b_idx, bins in enumerate(basins):
+                if bins.size == 0:
+                    continue
+                x_min = centers[bins[0]]
+                x_max = centers[bins[-1]]
+                ax3.axvspan(
+                    x_min,
+                    x_max,
+                    alpha=0.2,
+                    color=colors[b_idx % len(colors)],
+                )
+
             ax3.set_xlabel("fraction of native contacts")
             ax3.set_ylabel("free energy (arb. units)")
-            ax3.set_title(f"FNC free energy")
+            ax3.set_title(f"FNC free energy (basins highlighted)")
             fig3.savefig(sample_dir / "fnc_free_energy.png", dpi=200)
             plt.close(fig3)
 
@@ -916,31 +1023,19 @@ class MDEmulationSelfResults(BenchmarkResults):
         """
         각 샘플마다:
         - proj1 vs proj2 2D free-energy surface (F = -k_B T ln p + const)
+        - folding FNC 1D free energy 에서 정의된 basin 별 frame 들을
+            PCA 평면 위에 오버레이 (가능할 경우)
 
-        BioEmu MD emulation metric (DistributionMetrics2D) 과 동일한
-        binning / density / cutoff / mask / 색상 로직을 사용한다.
-
-        절차:
-        1) DistributionMetrics2D(reference_projections = proj_xy) 를 생성
-        2) metric.density_ref, metric.low_energy_mask, metric.edges_x/y 사용
-        3) F = -k_B T ln p 에서 최소값을 0 으로 shift
-        4) energy_cutoff 까지 turbo 컬러맵으로, 그 이상은 흰색(set_over)으로 표시
-        5) 각 frame 의 (proj1, proj2) 가 어느 bin 에 속하는지 찾아 그 bin 의 F 를
-            per-frame free energy 로 써서 md_emulation_proj2d.csv 에 free_energy 열 추가
+        생성 파일:
+        - md_emulation_proj2d.csv          : proj1, proj2, free_energy
+        - md_emulation_free_energy_*.npy   : grid 정보
+        - md_emulation_free_energy.png     : 2D free energy + basin overlay
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        import copy
-        import matplotlib.pyplot as plt
-
-        from bioemu_benchmarks.eval.md_emulation.state_metric import (
-            DistributionMetricSettings,
-            DistributionMetrics2D,
-        )
-
         settings = DistributionMetricSettings()
         max_energy = settings.energy_cutoff  # 원본 metric에서 사용하는 cutoff
-        levels = 20                          # contour level 수 (원하면 조절 가능)
+        levels = 20                          # contour level 수
 
         for s in self.samples:
             sample_dir = output_dir / s.name
@@ -992,17 +1087,16 @@ class MDEmulationSelfResults(BenchmarkResults):
                 f"mean(F)={F_fin.mean():.3f} kcal/mol"
             )
 
-            # 4) 원본 로직에 맞춰 cutoff 및 mask 적용
+            # 4) cutoff 및 mask 적용
             F_for_plot = np.minimum(F, max_energy + 1.0)
 
             # low_energy_mask 바깥 + P<=0 인 grid 는 plot 에서 가린다
             mask = (P <= 0.0) | (~low_mask)
             F_masked = np.ma.array(F_for_plot, mask=mask)
 
-            # ---------- 여기부터: 각 frame 의 free energy 계산 및 CSV 저장 ----------
+            # ---------- 각 frame 의 free energy 계산 및 CSV 저장 ----------
 
             # bin index (x: 0..nx-1, y: 0..ny-1) 찾기
-            # np.digitize 는 histogram2d 의 bin 정의와 호환되는 방식이므로 그대로 사용 가능
             ix = np.digitize(xy[:, 0], edges_x) - 1  # shape (n_frames,)
             iy = np.digitize(xy[:, 1], edges_y) - 1
 
@@ -1018,19 +1112,17 @@ class MDEmulationSelfResults(BenchmarkResults):
             valid_bins = (P[ix, iy] > 0.0) & (low_mask[ix, iy])
             frame_F[valid_bins] = F[ix[valid_bins], iy[valid_bins]]
 
-            # md_emulation_proj2d.csv 파일을 "proj1, proj2, free_energy" 로 다시 저장
+            # md_emulation_proj2d.csv 파일 저장
             df_proj = pd.DataFrame(
                 {
                     "proj1": xy[:, 0],
                     "proj2": xy[:, 1],
-                    "free_energy": frame_F,  # 단위: kcal/mol, min(F)=0 로 shift 된 값
+                    "free_energy": frame_F,  # 단위: kcal/mol, min(F)=0 로 shift
                 }
             )
             df_proj.to_csv(sample_dir / "md_emulation_proj2d.csv", index=False)
 
-            # ---------- 여기까지: per-frame free energy 저장 ----------
-
-            # 수치 저장 (grid 형태)
+            # ---------- grid 데이터 저장 ----------
             np.save(sample_dir / "md_emulation_free_energy_F_raw.npy", F)
             np.save(sample_dir / "md_emulation_free_energy_F_plot.npy", F_for_plot)
             np.save(sample_dir / "md_emulation_free_energy_P.npy", P)
@@ -1038,12 +1130,12 @@ class MDEmulationSelfResults(BenchmarkResults):
             np.save(sample_dir / "md_emulation_free_energy_xedges.npy", edges_x)
             np.save(sample_dir / "md_emulation_free_energy_yedges.npy", edges_y)
 
-            # 5) bin center 좌표 (DistributionMetrics2D 는 grid 를 따로 만들지 않으므로 직접 생성)
+            # 5) bin center 좌표
             xc = 0.5 * (edges_x[:-1] + edges_x[1:])
             yc = 0.5 * (edges_y[:-1] + edges_y[1:])
             Xc, Yc = np.meshgrid(xc, yc, indexing="ij")
 
-            # 6) turbo 컬러맵 + set_over("w") 로 원본과 같은 색상 로직 적용
+            # 6) turbo 컬러맵 + set_over("w")
             cmap = copy.copy(plt.cm.turbo)
             cmap.set_over(color="w")
 
@@ -1066,13 +1158,50 @@ class MDEmulationSelfResults(BenchmarkResults):
             ax.set_ylabel("PCA 2")
             ax.set_title(f"MD emulation 2D free energy (self)")
 
+            # 7) 가능하면 FNC basin 정보를 읽어서 해당 frame 들을 오버레이
+            basin_csv = sample_dir / "folding_fnc_free_energy_1d_per_frame.csv"
+            if basin_csv.exists():
+                df_fnc = pd.read_csv(basin_csv)
+                # frame 수가 동일하고 basin_id 컬럼이 있을 때만 사용
+                if (
+                    df_fnc.shape[0] == xy.shape[0]
+                    and "basin_id" in df_fnc.columns
+                ):
+                    basin_id = df_fnc["basin_id"].to_numpy(dtype=int)
+                    unique_basins = np.unique(basin_id[basin_id >= 0])
+
+                    colors = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
+
+                    for b_idx, b in enumerate(unique_basins):
+                        m = basin_id == b
+                        if not np.any(m):
+                            continue
+
+                        ax.scatter(
+                            xy[m, 0],
+                            xy[m, 1],
+                            s=6,
+                            edgecolors="k",
+                            facecolors=colors[b_idx % len(colors)],
+                            linewidths=0.3,
+                            alpha=0.7,
+                            label=f"basin {b}",
+                        )
+
+                    if unique_basins.size > 0:
+                        ax.legend(
+                            loc="best",
+                            fontsize=6,
+                            frameon=True,
+                            framealpha=0.7,
+                        )
+
             fig.savefig(
                 sample_dir / "md_emulation_free_energy.png",
                 dpi=300,
                 bbox_inches="tight",
             )
             plt.close(fig)
-
 
 # ----------------------------------------------------------------------
 # DSSP SELF (reference 없이 sample 자체 DSSP 통계)
@@ -1096,7 +1225,6 @@ class SingleSampleDSSP:
     helix_frac: np.ndarray
     sheet_frac: np.ndarray
     coil_frac: np.ndarray
-
 
 @dataclass
 class DSSPResults(BenchmarkResults):
