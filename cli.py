@@ -59,8 +59,8 @@ def run_benchmarks(
 
         # 옵션: 피클로 저장하고 싶으면 여기서 results 를 피클링해도 됨
 
-    with open(output_dir / "benchmark_metrics.json", "w") as f:
-        json.dump(aggregate_results, f, indent=2, sort_keys=True)
+    # with open(output_dir / "benchmark_metrics.json", "w") as f:
+    #     json.dump(aggregate_results, f, indent=2, sort_keys=True)
 
     print(f"[INFO] Aggregate metrics written to {output_dir / 'benchmark_metrics.json'}")
 

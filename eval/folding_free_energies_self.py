@@ -164,6 +164,8 @@ def evaluate_folding_free_energies_self(
                 foldedness=foldedness,
                 dg_kcal_per_mol=dg,
                 p_fold_mean=p_fold_mean,
+                pdb_path=spec.pdb_path,    # 추가
+                xtc_path=spec.xtc_path,    # 추가
             )
         )
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import json
 import numpy as np
 import pandas as pd
@@ -15,6 +15,7 @@ from bioemu_benchmarks.eval.md_emulation.state_metric import (
     DistributionMetrics2D,
 )
 from matplotlib.patches import Circle
+import mdtraj as md
 
 # BioEmu free_energies.py 와 동일한 볼츠만 상수 (kcal / (mol·K))
 K_BOLTZMANN = 0.001987203599772605  # kcal / (mol·K)
@@ -406,6 +407,7 @@ def _find_1d_basins(
 ) -> Tuple[List[np.ndarray], np.ndarray]:
     """
     1D free energy F에서 local minimum 인덱스를 기준으로 basin 인덱스들을 계산.
+    F는 이미 스무딩된 free energy(F_s)를 쓰는 것을 가정한다.
     """
     F = np.asarray(F, float)
     n = len(F)
@@ -422,17 +424,17 @@ def _find_1d_basins(
         if not (0 <= m < n):
             continue
 
-        # left 확장: minimum에서 왼쪽으로 갈 때 F가 단조 증가(또는 일정)하는 구간을 포함
+        # minimum에서 왼쪽으로 갈 때 F가 단조 증가(또는 일정)하는 구간을 포함
         left = m
         while left - 1 >= 0:
             if not np.isfinite(F[left - 1]):
                 break
-            # 왼쪽으로 한 칸 더 가면 다시 내려가기 시작하면(다른 골짜기로 넘어가면) 중단
+            # 다시 내려가기 시작하면 중단
             if F[left - 1] < F[left]:
                 break
             left -= 1
 
-        # right 확장: minimum에서 오른쪽으로 갈 때 F가 단조 증가(또는 일정)하는 구간을 포함
+        # minimum에서 오른쪽으로 갈 때 F가 단조 증가(또는 일정)하는 구간을 포함
         right = m
         while right + 1 < n:
             if not np.isfinite(F[right + 1]):
@@ -447,6 +449,7 @@ def _find_1d_basins(
         basin_id += 1
 
     return basins, basin_bin_id
+
 
 def _smooth_free_energy(F: np.ndarray, sigma: float = 1.0) -> np.ndarray:
     F = np.asarray(F, float)
@@ -463,25 +466,30 @@ def _smooth_free_energy(F: np.ndarray, sigma: float = 1.0) -> np.ndarray:
     F_smooth = F_smooth[radius:-radius]
     return F_smooth
 
+
 def _find_local_and_global_minima_1d(
     F: np.ndarray,
     P: np.ndarray,
     min_prominence: float = 1.0,
     smoothing_sigma: float = 2.0,
     min_width: int = 3,
-) -> Tuple[List[int], int]:
+) -> Tuple[List[int], int, np.ndarray]:
     """
     1D free energy F에서 smoothing 후 local minima와 global minimum bin을 찾는다.
+    반환값:
+        local_min_bins: local minimum 인덱스 리스트 (스무딩된 F_s 기준)
+        global_min_bin: global minimum 인덱스 (F_s 기준)
+        F_s: 스무딩된 free energy 배열
     """
     F = np.asarray(F, float)
     n = len(F)
     if n < 3:
-        return [], -1
+        return [], -1, F.copy()
 
     # smoothing
     F_s = _smooth_free_energy(F, sigma=smoothing_sigma)
 
-    # global minimum
+    # global minimum (스무딩된 F_s 기준)
     global_min_bin = int(np.argmin(F_s))
 
     local_min: List[int] = []
@@ -501,7 +509,7 @@ def _find_local_and_global_minima_1d(
         if prominence < min_prominence:
             continue
 
-        # width: valley 폭
+        # width: valley 폭 (F_s 기준)
         left = i
         while left - 1 >= 0 and np.isfinite(F_s[left - 1]):
             # 왼쪽으로 갈수록 F_s가 단조 증가(또는 일정)하는 구간만 포함
@@ -524,23 +532,26 @@ def _find_local_and_global_minima_1d(
     if global_min_bin not in local_min:
         local_min.append(global_min_bin)
 
-    return sorted(local_min), global_min_bin
+    return sorted(local_min), global_min_bin, F_s
+
+def _pick_rep_frame_idx(fnc: np.ndarray, target_fnc: float) -> Optional[int]:
+    fnc = np.asarray(fnc, float)
+    mask = np.isfinite(fnc)
+    if not np.any(mask):
+        return None
+    idx_all = np.where(mask)[0]
+    idx_local = np.argmin(np.abs(fnc[mask] - target_fnc))
+    return int(idx_all[idx_local])
 
 # ----------------------------------------------------------------------
 # FOLDING FREE ENERGIES (self-reference 버전)
 # ----------------------------------------------------------------------
 
+
 @dataclass
 class SingleSampleFoldingFE:
     """
     한 샘플(trajectory)에 대한 folding free energy 관련 정보.
-
-    name            : 샘플 이름
-    frame_idx       : 프레임 인덱스 (0,1,2,...)
-    fnc             : 각 프레임의 fraction of native contacts
-    foldedness      : 각 프레임의 foldedness (Heaviside 기반, 0 또는 1)
-    dg_kcal_per_mol : 전체 trajectory 기준 추정 ΔG (kcal/mol)
-    p_fold_mean     : foldedness 평균 (0~1)
     """
     name: str
     frame_idx: np.ndarray
@@ -548,22 +559,13 @@ class SingleSampleFoldingFE:
     foldedness: np.ndarray
     dg_kcal_per_mol: float
     p_fold_mean: float
-
+    pdb_path: Path          # 추가
+    xtc_path: Path 
 
 @dataclass
 class FoldingFreeEnergyResults(BenchmarkResults):
     """
     FOLDING_FREE_ENERGIES 아이디어를 self-reference 로 적용한 결과 모음.
-
-    samples:
-        각 샘플별 FNC(t), foldedness(t), dG, p_fold_mean
-    temperature_K:
-        ΔG 계산에 사용한 온도 (K)
-    p_fold_thr, steepness:
-        FNC → foldedness 에 쓰인 threshold 및 (과거 sigmoid 버전과의)
-        호환성을 위한 steepness 인자.
-        현재 구현에서는 foldedness 가 Heaviside step 이므로,
-        steepness 는 사용되지 않습니다.
     """
     samples: List[SingleSampleFoldingFE]
     temperature_K: float = 295.0
@@ -589,9 +591,6 @@ class FoldingFreeEnergyResults(BenchmarkResults):
         }
 
     def save_results(self, output_dir: Path) -> None:
-        """
-        샘플별 FNC / foldedness 시계열과 dG 요약을 저장.
-        """
         output_dir.mkdir(parents=True, exist_ok=True)
 
         summaries = []
@@ -623,8 +622,8 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                 "p_fold_thr": float(self.p_fold_thr),
                 "steepness": float(self.steepness),
             }
-            with open(sample_dir / "folding_fe_summary.json", "w") as f:
-                json.dump(summary, f, indent=2, sort_keys=True)
+            # with open(sample_dir / "folding_fe_summary.json", "w") as f:
+            #     json.dump(summary, f, indent=2, sort_keys=True)
 
             summaries.append(summary)
 
@@ -636,15 +635,22 @@ class FoldingFreeEnergyResults(BenchmarkResults):
         """
         각 샘플마다:
         - FNC 기반 1D free energy (–log p(FNC), 0~1 구간, 임의 단위)
-        - basin(움푹 파인 구간) 탐지 및 프레임별 basin_id 저장
+        - basin 탐지 및 프레임별 basin_id 저장
         - free-energy 곡선 위의 global / local minimum 을
         점선 + 'g_m' / 'l_m' 으로 표시
+        - 각 minimum에 대응하는 representative 구조를 PDB로 저장
         """
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # basin 정의 하이퍼파라미터
-        delta_F_cut = 1.0           # 로컬 최소에서 ΔF <= 이내를 같은 basin 으로
-        max_depth_from_global = 3.0 # 글로벌 최소보다 이 값 이상 높으면 무시
+        # FNC 값(target_fnc)에 가장 가까운 프레임 인덱스를 고르는 보조 함수
+        def _pick_rep_frame_idx(fnc: np.ndarray, target_fnc: float):
+            fnc = np.asarray(fnc, float)
+            mask = np.isfinite(fnc)
+            if not np.any(mask):
+                return None
+            idx_all = np.where(mask)[0]
+            idx_local = np.argmin(np.abs(fnc[mask] - target_fnc))
+            return int(idx_all[idx_local])
 
         for s in self.samples:
             sample_dir = output_dir / s.name
@@ -679,24 +685,23 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                 f"max(F_grid)={F_fin.max():.3f}, "
                 f"mean(F_grid)={F_fin.mean():.3f}"
             )
-            local_min_bins, global_min_bin = _find_local_and_global_minima_1d(
+
+            # 1-1) local / global minima 및 스무딩된 free energy F_s
+            local_min_bins, global_min_bin, F_s = _find_local_and_global_minima_1d(
                 F,
                 P,
                 min_prominence=1.5,
-                smoothing_sigma=2,
-                min_width=3
+                smoothing_sigma=2.0,
+                min_width=3,
             )
 
-            # 1-1) basin 탐지 (bin 기준) – 프레임별 basin_id 계산용
+            # 1-2) basin 탐지 (스무딩된 free energy F_s 기준)
             basins, basin_bin_id = _find_1d_basins(
-                F,
+                F_s,
                 local_min_bins=local_min_bins,
             )
 
-            # 1-2) 곡선 자체에서 global / local minimum bin 찾기
-
-
-            # grid 정보 CSV
+            # 1-3) grid 정보 CSV (원본 F와 basin_id 저장)
             df_grid = pd.DataFrame(
                 {
                     "fnc_center": centers,
@@ -750,24 +755,67 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                 index=False,
             )
 
-            # 3) 1D free energy 플롯 + g_m / l_m 점선 표기
+            # 3) g_m / l_m 에 해당하는 representative frame 구조를 PDB로 저장
+            try:
+                # g_m 에 해당하는 목표 FNC 값
+                gm_fnc = centers[global_min_bin]
+                # 각 l_m 에 해당하는 목표 FNC 값들 (g_m 제외)
+                lm_fncs = [centers[b] for b in local_min_bins if b != global_min_bin]
+
+                gm_frame = _pick_rep_frame_idx(s.fnc, gm_fnc)
+                lm_frames = [_pick_rep_frame_idx(s.fnc, q) for q in lm_fncs]
+
+                # trajectory 로드 (필요할 때만)
+                if gm_frame is not None or any(fr is not None for fr in lm_frames):
+                    traj = md.load(
+                        s.xtc_path.as_posix(),
+                        top=s.pdb_path.as_posix(),
+                    )
+
+                    if gm_frame is not None and 0 <= gm_frame < traj.n_frames:
+                        gm_traj = traj[gm_frame]
+                        gm_traj.save_pdb(
+                            (sample_dir / f"structure_gm_frame{gm_frame}.pdb").as_posix()
+                        )
+
+                    for k, fr in enumerate(lm_frames):
+                        if fr is None or not (0 <= fr < traj.n_frames):
+                            continue
+                        lm_traj = traj[fr]
+                        lm_traj.save_pdb(
+                            (sample_dir / f"structure_lm{k}_frame{fr}.pdb").as_posix()
+                        )
+            except Exception as e:
+                print(f"[WARN] FOLDING_FNC_FE_1D_PDB {s.name}: 구조 저장 중 오류 발생: {e}")
+
+            # 4) 1D free energy 플롯 + g_m / l_m 점선 표기
             fig3, ax3 = plt.subplots(figsize=(8, 4))
 
-            # 기존 BioEmu 스타일 free energy 곡선 + 회색 영역
-            plot_smoothed_1d_free_energy(
-                s.fnc,
-                range=(0.0, 1.0),
-                ax=ax3,
+            baseline = float(np.min(F_s)) - 0.5
+
+            # 밝은 회색 영역 + 검은 free-energy 곡선 (스무딩된 F_s 기준)
+            ax3.fill_between(
+                centers,
+                F_s,
+                baseline,
+                alpha=0.4,
+                color="0.85",
+            )
+            ax3.plot(
+                centers,
+                F_s,
+                linewidth=2.5,
+                color="k",
             )
 
             ymin, ymax = ax3.get_ylim()
             height = ymax - ymin
-            label_y = ymin + 0.05 * height  # 텍스트가 놓일 y 위치 (아래쪽 고정)
+            label_y = ymin + 0.05 * height  # 텍스트 y 위치
 
-            # global minimum
+            # global minimum (F_s 기준)
             if global_min_bin >= 0:
                 x_g = centers[global_min_bin]
-                y_g = F[global_min_bin]
+                y_g = F_s[global_min_bin]
                 ax3.plot(
                     [x_g, x_g],
                     [label_y, y_g],
@@ -785,12 +833,12 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                     color="k",
                 )
 
-            # local minima (global 제외)
+            # local minima (global 제외, F_s 기준)
             for b in local_min_bins:
                 if b == global_min_bin:
                     continue
                 x_l = centers[b]
-                y_l = F[b]
+                y_l = F_s[b]
                 ax3.plot(
                     [x_l, x_l],
                     [label_y, y_l],
@@ -1091,8 +1139,8 @@ class MDEmulationSelfResults(BenchmarkResults):
                 "proj1_mean": float(np.mean(s.proj_xy[:, 0])),
                 "proj2_mean": float(np.mean(s.proj_xy[:, 1])),
             }
-            with open(sample_dir / "md_emulation_summary.json", "w") as f:
-                json.dump(summary, f, indent=2, sort_keys=True)
+            # with open(sample_dir / "md_emulation_summary.json", "w") as f:
+            #     json.dump(summary, f, indent=2, sort_keys=True)
 
             summaries.append(summary)
 
@@ -1321,8 +1369,8 @@ class DSSPResults(BenchmarkResults):
                 "coil_frac_mean": float(s.coil_frac.mean()),
                 "coil_frac_std": float(s.coil_frac.std()),
             }
-            with open(sample_dir / "dssp_summary.json", "w") as f:
-                json.dump(summary, f, indent=2, sort_keys=True)
+            # with open(sample_dir / "dssp_summary.json", "w") as f:
+            #     json.dump(summary, f, indent=2, sort_keys=True)
 
             summaries.append(summary)
 
