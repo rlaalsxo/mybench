@@ -595,7 +595,7 @@ class FoldingFreeEnergyResults(BenchmarkResults):
 
         summaries = []
         for s in self.samples:
-            sample_dir = output_dir / s.name
+            sample_dir = output_dir
             sample_dir.mkdir(parents=True, exist_ok=True)
 
             n_frames = len(s.fnc)
@@ -653,7 +653,7 @@ class FoldingFreeEnergyResults(BenchmarkResults):
             return int(idx_all[idx_local])
 
         for s in self.samples:
-            sample_dir = output_dir / s.name
+            sample_dir = output_dir
             sample_dir.mkdir(parents=True, exist_ok=True)
 
             # 1) FNC 분포 → 1D free energy grid
@@ -858,7 +858,7 @@ class FoldingFreeEnergyResults(BenchmarkResults):
 
             ax3.set_xlabel("fraction of native contacts")
             ax3.set_ylabel("free energy (arb. units)")
-            ax3.set_title("results - FNC free energy")
+            ax3.set_title("FNC free energy")
             fig3.savefig(sample_dir / "fnc_free_energy.png", dpi=200)
             plt.close(fig3)
 
@@ -1121,7 +1121,7 @@ class MDEmulationSelfResults(BenchmarkResults):
 
         summaries = []
         for s in self.samples:
-            sample_dir = output_dir / s.name
+            sample_dir = output_dir
             sample_dir.mkdir(parents=True, exist_ok=True)
 
             n_points = s.proj_xy.shape[0]
@@ -1168,7 +1168,7 @@ class MDEmulationSelfResults(BenchmarkResults):
         levels = 20
 
         for s in self.samples:
-            sample_dir = output_dir / s.name
+            sample_dir = output_dir
             sample_dir.mkdir(parents=True, exist_ok=True)
 
             xy = s.proj_xy  # shape (n_frames, 2)
@@ -1341,7 +1341,7 @@ class DSSPResults(BenchmarkResults):
 
         summaries = []
         for s in self.samples:
-            sample_dir = output_dir / s.name
+            sample_dir = output_dir
             sample_dir.mkdir(parents=True, exist_ok=True)
 
             # 1) 전체 DSSP 코드 저장 (numpy 배열)
@@ -1386,7 +1386,7 @@ class DSSPResults(BenchmarkResults):
         sheet_codes = np.array(["E", "B"], dtype="<U1")
 
         for s in self.samples:
-            sample_dir = output_dir / s.name
+            sample_dir = output_dir
             sample_dir.mkdir(parents=True, exist_ok=True)
 
             dssp_codes = s.dssp_codes
@@ -1414,7 +1414,7 @@ class DSSPResults(BenchmarkResults):
             ax.set_ylim(0.0, 1.0)
             ax.set_xlabel("residue index")
             ax.set_ylabel("fraction")
-            ax.set_title(s.name)
+            ax.set_title("2ndary structure")
 
             # 범례를 축 밖 오른쪽에 배치
             legend = ax.legend(
