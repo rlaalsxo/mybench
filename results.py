@@ -775,7 +775,7 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                     if gm_frame is not None and 0 <= gm_frame < traj.n_frames:
                         gm_traj = traj[gm_frame]
                         gm_traj.save_pdb(
-                            (sample_dir / f"structure_gm_frame{gm_frame}.pdb").as_posix()
+                            (sample_dir / f"structure_gm.pdb").as_posix()
                         )
 
                     for k, fr in enumerate(lm_frames):
@@ -783,7 +783,7 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                             continue
                         lm_traj = traj[fr]
                         lm_traj.save_pdb(
-                            (sample_dir / f"structure_lm{k}_frame{fr}.pdb").as_posix()
+                            (sample_dir / f"structure_lm{k}.pdb").as_posix()
                         )
             except Exception as e:
                 print(f"[WARN] FOLDING_FNC_FE_1D_PDB {s.name}: 구조 저장 중 오류 발생: {e}")
