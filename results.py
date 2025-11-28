@@ -799,7 +799,7 @@ class FoldingFreeEnergyResults(BenchmarkResults):
                 F_s,
                 baseline,
                 alpha=0.4,
-                color="0.85",
+                color="0.7",
             )
             ax3.plot(
                 centers,
