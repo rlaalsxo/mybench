@@ -1,22 +1,18 @@
 # mybench/eval/folding_free_energies_self.py
 from __future__ import annotations
 from typing import Iterable, Optional, List
-
 import mdtraj as md
 import numpy as np
-
 # BioEmu FOLDING_FREE_ENGERGIES 에서 쓰는 FNC 정의 재사용
 from bioemu_benchmarks.eval.folding_free_energies.fraction_native_contacts import (
     get_fnc_from_samples_trajectory,
     FNCSettings,
 )
-
 from results import SingleSampleFoldingFE, FoldingFreeEnergyResults
 from samples import SampleSpec  # 기존 basic_stats, fnc_self 에서 쓰시던 타입 그대로 사용
 
 # BioEmu free_energies.py 에 정의된 볼츠만 상수와 동일 값
 K_BOLTZMANN = 0.001987203599772605  # kcal / (mol·K)
-
 
 def _foldedness_from_fnc(
     fnc: np.ndarray,
@@ -39,7 +35,6 @@ def _foldedness_from_fnc(
         steepness 인자는 인터페이스 호환성만 유지하며 실제 계산에는 사용하지 않는다.
     """
     return (fnc >= p_fold_thr).astype(float)
-
 
 def _compute_dG_from_fnc(
     fnc: np.ndarray,
@@ -70,7 +65,6 @@ def _compute_dG_from_fnc(
 
     dG = -np.log(ratio) * K_BOLTZMANN * temperature
     return float(dG)
-
 
 def evaluate_folding_free_energies_self(
     samples: Iterable[SampleSpec],

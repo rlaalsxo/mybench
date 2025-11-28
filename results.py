@@ -405,18 +405,12 @@ def _find_1d_basins(
     local_min_bins: List[int],
 ) -> Tuple[List[np.ndarray], np.ndarray]:
     """
-    정상적인 basin 정의:
-    - 주어진 local minima 를 기준으로
-    - 좌·우 방향으로 free energy 가 증가하는 방향의
-      첫 번째 ridge(saddle) 전까지 확장한 구간을 basin 으로 정의.
-
-    delta_F_cut 같은 인위적 threshold 사용하지 않음.
+    1D free energy F에서 local minimum 인덱스를 기준으로 basin 인덱스들을 계산.
     """
-
-    F = np.asarray(F)
+    F = np.asarray(F, float)
     n = len(F)
 
-    basins = []
+    basins: List[np.ndarray] = []
     basin_bin_id = np.full(n, -1, dtype=int)
 
     if len(local_min_bins) == 0:
@@ -425,22 +419,25 @@ def _find_1d_basins(
     basin_id = 0
 
     for m in local_min_bins:
+        if not (0 <= m < n):
+            continue
 
-        # left 확장
+        # left 확장: minimum에서 왼쪽으로 갈 때 F가 단조 증가(또는 일정)하는 구간을 포함
         left = m
         while left - 1 >= 0:
             if not np.isfinite(F[left - 1]):
                 break
-            if F[left - 1] > F[left]:
-                break   # saddle 방향 도달
+            # 왼쪽으로 한 칸 더 가면 다시 내려가기 시작하면(다른 골짜기로 넘어가면) 중단
+            if F[left - 1] < F[left]:
+                break
             left -= 1
 
-        # right 확장
+        # right 확장: minimum에서 오른쪽으로 갈 때 F가 단조 증가(또는 일정)하는 구간을 포함
         right = m
         while right + 1 < n:
             if not np.isfinite(F[right + 1]):
                 break
-            if F[right + 1] > F[right]:
+            if F[right + 1] < F[right]:
                 break
             right += 1
 
@@ -451,54 +448,83 @@ def _find_1d_basins(
 
     return basins, basin_bin_id
 
+def _smooth_free_energy(F: np.ndarray, sigma: float = 1.0) -> np.ndarray:
+    F = np.asarray(F, float)
+    if F.size < 3:
+        return F.copy()
+
+    radius = int(3 * sigma)
+    x = np.arange(-radius, radius + 1)
+    kernel = np.exp(-(x ** 2) / (2 * sigma * sigma))
+    kernel /= kernel.sum()
+
+    F_pad = np.pad(F, radius, mode="edge")
+    F_smooth = np.convolve(F_pad, kernel, mode="same")
+    F_smooth = F_smooth[radius:-radius]
+    return F_smooth
+
 def _find_local_and_global_minima_1d(
     F: np.ndarray,
     P: np.ndarray,
-    min_prominence: float = 0.5,
+    min_prominence: float = 1.0,
+    smoothing_sigma: float = 2.0,
+    min_width: int = 3,
 ) -> Tuple[List[int], int]:
     """
-    정상적인 1D local/global minimum 탐지.
-
-    - global minimum: F가 전체에서 최소인 bin
-    - local minima:
-        * F[i] < F[i-1] AND F[i] < F[i+1]
-        * prominence ≥ min_prominence
+    1D free energy F에서 smoothing 후 local minima와 global minimum bin을 찾는다.
     """
-
-    F = np.asarray(F)
-    P = np.asarray(P)
-
+    F = np.asarray(F, float)
     n = len(F)
     if n < 3:
         return [], -1
 
+    # smoothing
+    F_s = _smooth_free_energy(F, sigma=smoothing_sigma)
+
     # global minimum
-    global_min_bin = int(np.argmin(F))
+    global_min_bin = int(np.argmin(F_s))
 
-    local_min = []
+    local_min: List[int] = []
 
-    # 1D strict minima 탐지
     for i in range(1, n - 1):
-        if not (np.isfinite(F[i]) and np.isfinite(F[i - 1]) and np.isfinite(F[i + 1])):
+        if not (np.isfinite(F_s[i]) and np.isfinite(F_s[i - 1]) and np.isfinite(F_s[i + 1])):
             continue
 
-        if F[i] < F[i - 1] and F[i] < F[i + 1]:
+        # strict local minimum
+        if not (F_s[i] < F_s[i - 1] and F_s[i] < F_s[i + 1]):
+            continue
 
-            # prominence 계산
-            left_peak = max(F[i - 1], F[i])
-            right_peak = max(F[i + 1], F[i])
-            prominence = min(left_peak - F[i], right_peak - F[i])
+        # prominence
+        left_saddle = np.max(F_s[: i + 1])
+        right_saddle = np.max(F_s[i:])
+        prominence = min(left_saddle - F_s[i], right_saddle - F_s[i])
+        if prominence < min_prominence:
+            continue
 
-            if prominence >= min_prominence:
-                local_min.append(i)
+        # width: valley 폭
+        left = i
+        while left - 1 >= 0 and np.isfinite(F_s[left - 1]):
+            # 왼쪽으로 갈수록 F_s가 단조 증가(또는 일정)하는 구간만 포함
+            if F_s[left - 1] < F_s[left]:
+                break
+            left -= 1
 
-    # global minimum 포함 (중복 제거)
+        right = i
+        while right + 1 < n and np.isfinite(F_s[right + 1]):
+            if F_s[right + 1] < F_s[right]:
+                break
+            right += 1
+
+        width = right - left + 1
+        if width < min_width:
+            continue
+
+        local_min.append(i)
+
     if global_min_bin not in local_min:
         local_min.append(global_min_bin)
 
-    local_min = sorted(local_min)
-
-    return local_min, global_min_bin
+    return sorted(local_min), global_min_bin
 
 # ----------------------------------------------------------------------
 # FOLDING FREE ENERGIES (self-reference 버전)
@@ -656,9 +682,11 @@ class FoldingFreeEnergyResults(BenchmarkResults):
             local_min_bins, global_min_bin = _find_local_and_global_minima_1d(
                 F,
                 P,
-                min_prominence=0.5,
+                min_prominence=1.5,
+                smoothing_sigma=2,
+                min_width=3
             )
-            
+
             # 1-1) basin 탐지 (bin 기준) – 프레임별 basin_id 계산용
             basins, basin_bin_id = _find_1d_basins(
                 F,
@@ -789,7 +817,6 @@ class FoldingFreeEnergyResults(BenchmarkResults):
 # ----------------------------------------------------------------------
 # TICA 기반 2D free energy landscape
 # ----------------------------------------------------------------------
-
 
 @dataclass
 class SingleSampleTICA:
